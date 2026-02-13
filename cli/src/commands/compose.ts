@@ -120,6 +120,7 @@ export const composeCommand = new Command('compose')
       await renderDemoVideo({
         timeline: finalTimeline,
         outputPath,
+        publicDir: tempDir,
       });
       spinner.succeed('Video composed');
     } catch (err: any) {

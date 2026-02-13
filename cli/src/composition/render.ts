@@ -6,6 +6,7 @@ import type { Timeline } from '../timeline/types.js';
 export interface RenderOptions {
   timeline: Timeline;
   outputPath: string;
+  publicDir: string;
   entryPoint?: string;
 }
 
@@ -14,7 +15,7 @@ export async function renderDemoVideo(opts: RenderOptions): Promise<string> {
 
   const bundlePath = await bundle({
     entryPoint,
-    // Remotion bundles with webpack — no extra config needed
+    publicDir: opts.publicDir,
   });
 
   const composition = await selectComposition({

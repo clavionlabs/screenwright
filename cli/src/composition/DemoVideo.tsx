@@ -1,15 +1,11 @@
 import React from 'react';
-import { OffthreadVideo } from 'remotion';
+import { OffthreadVideo, staticFile } from 'remotion';
+import { basename } from 'node:path';
 import type { CursorTargetEvent, ActionEvent, NarrationEvent } from '../timeline/types.js';
 import type { ValidatedTimeline } from '../timeline/schema.js';
 import { CursorOverlay } from './CursorOverlay.js';
 import { NarrationTrack } from './NarrationTrack.js';
 import { precomputeCursorPaths } from './cursor-path.js';
-
-function toVideoSrc(path: string): string {
-  if (!path || path.startsWith('http') || path.startsWith('file://')) return path;
-  return `file://${path}`;
-}
 
 interface Props {
   timeline: ValidatedTimeline;
@@ -40,7 +36,7 @@ export const DemoVideo: React.FC<Props> = ({ timeline }) => {
       }}
     >
       {/* Layer 1: Base video from Playwright */}
-      <OffthreadVideo src={toVideoSrc(timeline.metadata.videoFile)} />
+      <OffthreadVideo src={staticFile(basename(timeline.metadata.videoFile))} />
 
       {/* Layer 2: Cursor overlay */}
       <CursorOverlay cursorEvents={cursorEvents} clickEvents={clickEvents} fps={fps} />

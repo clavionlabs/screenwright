@@ -2,7 +2,7 @@
 name: screenwright
 description: Turn Playwright E2E tests into polished product demo videos
 user_invocable: true
-version: 0.1.6
+version: 0.1.7
 ---
 
 # Screenwright
