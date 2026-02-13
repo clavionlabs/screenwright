@@ -82,8 +82,10 @@ The scenario must:
 - Add narration to key actions
 - Add `sw.wait()` between logical steps
 - NOT include any assertions
+- NOT use `page.*` methods directly — always use `sw.*` helpers
+- NOT import expect, assert, or any test library
 
-#### Example Generated Scenario
+#### Example 1: Login Flow
 
 ```typescript
 import type { ScreenwrightHelpers } from '@screenwright/cli';
@@ -107,6 +109,66 @@ export default async function scenario(sw: ScreenwrightHelpers) {
   await sw.wait(3000);
 }
 ```
+
+#### Example 2: Multi-Step Form
+
+```typescript
+import type { ScreenwrightHelpers } from '@screenwright/cli';
+
+export default async function scenario(sw: ScreenwrightHelpers) {
+  await sw.scene('Starting the Application');
+  await sw.navigate('http://localhost:3000/apply', {
+    narration: 'We begin on the application form.',
+  });
+  await sw.wait(1500);
+
+  await sw.scene('Personal Information');
+  await sw.fill('[data-testid="first-name"]', 'Jordan', {
+    narration: "Let's fill in our personal details.",
+  });
+  await sw.wait(500);
+  await sw.fill('[data-testid="last-name"]', 'Rivera');
+  await sw.wait(500);
+  await sw.fill('[data-testid="email"]', 'jordan.rivera@acme.co', {
+    narration: 'Add our work email.',
+  });
+  await sw.wait(1000);
+
+  await sw.hover('[data-testid="role-select"]', {
+    narration: 'Now we select a role from the dropdown.',
+  });
+  await sw.click('[data-testid="role-select"]');
+  await sw.wait(800);
+  await sw.click('[data-testid="role-engineering"]');
+  await sw.wait(1000);
+
+  await sw.scene('Review and Submit');
+  await sw.narrate('Everything looks good. Time to submit.');
+  await sw.wait(1500);
+  await sw.press('Tab');
+  await sw.click('[data-testid="submit-btn"]', {
+    narration: 'Submit the application.',
+  });
+  await sw.wait(2000);
+  await sw.narrate('The application has been submitted successfully.');
+}
+```
+
+### Step 3b: Validate Scenario
+
+After generating the scenario, validate it against these rules before presenting to the user:
+
+1. **Must have** `import ... { ScreenwrightHelpers } from '@screenwright/cli'` (accepts `import type`, `import { type ... }`, single or double quotes)
+2. **Must have** `export default async function`
+3. **Must NOT** use raw `page.*()` calls — only `sw.*` helpers
+4. **Must NOT** import or call `expect()` or `assert()`
+5. **Should have** at least one `sw.scene()` call
+6. **Should have** at least one `sw.wait()` call
+7. **Should have** narration on key actions
+
+If validation fails, regenerate and include the specific error messages so you can fix exactly what went wrong. Maximum 3 generation attempts before asking the user for guidance.
+
+When regenerating after validation failure, include the specific validation error messages so you can fix exactly what went wrong. For example: "The previous attempt had these errors: MISSING_IMPORT (Missing ScreenwrightHelpers import), RAW_PAGE_CALL (Raw page.*() calls found). Please fix these specific issues."
 
 ### Step 4: Present Scenario for Approval
 
@@ -149,6 +211,9 @@ Demo video saved to: .screenwright/output/<name>-demo.mp4
 - If the app server isn't running: remind the user to start their dev server
 - If Piper TTS fails: suggest `--no-voiceover` flag or re-run `screenwright init`
 - If a selector fails: show the error and offer to edit the scenario
+- If scenario has validation errors after generation: include the specific error codes and messages when retrying generation, and fix only the flagged issues
+- If compose fails with an import error: check scenario syntax — ensure `import type { ScreenwrightHelpers } from '@screenwright/cli'` is present
+- If compose fails with "must export default async function": ensure the scenario has `export default async function scenario(sw: ScreenwrightHelpers)`
 
 ## Notes
 

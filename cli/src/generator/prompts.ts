@@ -26,7 +26,31 @@ Rules:
 5. Add sw.wait() calls between logical steps for pacing
 6. Use sw.scene() to organize into 2-5 scenes
 7. Keep the same user flow as the original test
-8. Do NOT include assertions — this is a demo, not a test`;
+8. Do NOT include assertions — this is a demo, not a test
+
+Output format — always follow this exact structure:
+
+\`\`\`typescript
+import type { ScreenwrightHelpers } from '@screenwright/cli';
+
+export default async function scenario(sw: ScreenwrightHelpers) {
+  // Scene 1
+  await sw.scene('...');
+  // ... actions ...
+
+  // Scene 2
+  await sw.scene('...');
+  // ... actions ...
+}
+\`\`\`
+
+Common mistakes — do NOT do any of these:
+- Do NOT use page.click(), page.fill(), or any page.* methods — use sw.click(), sw.fill() etc.
+- Do NOT import expect, assert, or any test library
+- Do NOT call expect() or assert()
+- Do NOT use page.evaluate() or page.waitForSelector()
+- Do NOT add test(), describe(), or beforeEach() wrappers
+- Do NOT use page.locator().click() — use sw.click(selector) directly`;
 
 export function buildUserPrompt(
   testSource: string,
@@ -38,8 +62,64 @@ export function buildUserPrompt(
 Narration style: ${narrationStyle}
 ${narrationStyle === 'brief' ? 'Use short, concise narration (1 sentence per narration cue).' : 'Use detailed narration that explains each step clearly.'}
 
-${appDescription ? `App context: ${appDescription}\n` : ''}
-Test source:
+${appDescription ? `App context: ${appDescription}\n\n` : ''}Here is an example conversion for reference:
+
+Input:
+\`\`\`typescript
+import { test, expect } from '@playwright/test';
+
+test('checkout flow', async ({ page }) => {
+  await page.goto('http://localhost:3000');
+  await page.click('[data-testid="product-laptop"]');
+  await page.click('[data-testid="add-to-cart"]');
+  await page.fill('[data-testid="email"]', 'test@example.com');
+  await page.click('[data-testid="checkout"]');
+  await expect(page.locator('.confirmation')).toBeVisible();
+});
+\`\`\`
+
+Output:
+\`\`\`typescript
+import type { ScreenwrightHelpers } from '@screenwright/cli';
+
+export default async function scenario(sw: ScreenwrightHelpers) {
+  await sw.scene('Shopping for a Laptop');
+  await sw.navigate('http://localhost:3000', {
+    narration: 'Let\\'s browse the electronics store.',
+  });
+  await sw.wait(1500);
+
+  await sw.click('[data-testid="product-laptop"]', {
+    narration: 'We\\'ll select the MacBook Pro.',
+  });
+  await sw.wait(1000);
+
+  await sw.scene('Adding to Cart');
+  await sw.click('[data-testid="add-to-cart"]', {
+    narration: 'Add it to our cart.',
+  });
+  await sw.wait(1500);
+
+  await sw.scene('Checkout');
+  await sw.fill('[data-testid="email"]', 'sarah.chen@acme.co', {
+    narration: 'Enter our email address for the order confirmation.',
+  });
+  await sw.wait(1000);
+
+  await sw.click('[data-testid="checkout"]', {
+    narration: 'Complete the purchase.',
+  });
+  await sw.wait(2000);
+  await sw.narrate('The order has been confirmed successfully.');
+}
+\`\`\`
+
+Edge cases:
+- If the test file has multiple tests, convert only the first test
+- If there is a beforeEach hook, incorporate its actions at the start of the scenario
+- Simplify complex locators to CSS selectors where possible
+
+Now convert this test:
 \`\`\`typescript
 ${testSource}
 \`\`\`
