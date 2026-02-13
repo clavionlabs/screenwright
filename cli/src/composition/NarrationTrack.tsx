@@ -1,6 +1,5 @@
 import React from 'react';
 import { Audio, Sequence, staticFile } from 'remotion';
-import { basename } from 'node:path';
 import type { NarrationEvent } from '../timeline/types.js';
 
 interface Props {
@@ -15,7 +14,7 @@ export const NarrationTrack: React.FC<Props> = ({ narrations, fps }) => {
         .filter(n => n.audioFile)
         .map((n, i) => (
           <Sequence key={n.id} from={Math.round((n.timestampMs / 1000) * fps)}>
-            <Audio src={staticFile(basename(n.audioFile!))} />
+            <Audio src={staticFile(n.audioFile!)} />
           </Sequence>
         ))}
     </>

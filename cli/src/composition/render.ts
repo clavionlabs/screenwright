@@ -1,6 +1,6 @@
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
-import { resolve } from 'node:path';
+import { resolve, basename } from 'node:path';
 import type { Timeline } from '../timeline/types.js';
 
 export interface RenderOptions {
@@ -8,6 +8,27 @@ export interface RenderOptions {
   outputPath: string;
   publicDir: string;
   entryPoint?: string;
+}
+
+/**
+ * Rewrite absolute file paths in the timeline to basenames.
+ * Remotion components run in a browser (webpack) and resolve assets
+ * via staticFile() against the publicDir — they only need filenames.
+ */
+function toStaticPaths(timeline: Timeline): Timeline {
+  return {
+    ...timeline,
+    metadata: {
+      ...timeline.metadata,
+      videoFile: basename(timeline.metadata.videoFile),
+    },
+    events: timeline.events.map(e => {
+      if (e.type === 'narration' && e.audioFile) {
+        return { ...e, audioFile: basename(e.audioFile) };
+      }
+      return e;
+    }),
+  };
 }
 
 export async function renderDemoVideo(opts: RenderOptions): Promise<string> {
@@ -18,10 +39,12 @@ export async function renderDemoVideo(opts: RenderOptions): Promise<string> {
     publicDir: opts.publicDir,
   });
 
+  const staticTimeline = toStaticPaths(opts.timeline);
+
   const composition = await selectComposition({
     serveUrl: bundlePath,
     id: 'DemoVideo',
-    inputProps: { timeline: opts.timeline },
+    inputProps: { timeline: staticTimeline },
   });
 
   await renderMedia({
@@ -29,7 +52,7 @@ export async function renderDemoVideo(opts: RenderOptions): Promise<string> {
     serveUrl: bundlePath,
     codec: 'h264',
     outputLocation: opts.outputPath,
-    inputProps: { timeline: opts.timeline },
+    inputProps: { timeline: staticTimeline },
   });
 
   return opts.outputPath;

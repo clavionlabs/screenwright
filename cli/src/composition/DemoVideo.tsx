@@ -1,6 +1,5 @@
 import React from 'react';
 import { OffthreadVideo, staticFile } from 'remotion';
-import { basename } from 'node:path';
 import type { CursorTargetEvent, ActionEvent, NarrationEvent } from '../timeline/types.js';
 import type { ValidatedTimeline } from '../timeline/schema.js';
 import { CursorOverlay } from './CursorOverlay.js';
@@ -36,7 +35,7 @@ export const DemoVideo: React.FC<Props> = ({ timeline }) => {
       }}
     >
       {/* Layer 1: Base video from Playwright */}
-      <OffthreadVideo src={staticFile(basename(timeline.metadata.videoFile))} />
+      <OffthreadVideo src={staticFile(timeline.metadata.videoFile)} />
 
       {/* Layer 2: Cursor overlay */}
       <CursorOverlay cursorEvents={cursorEvents} clickEvents={clickEvents} fps={fps} />
