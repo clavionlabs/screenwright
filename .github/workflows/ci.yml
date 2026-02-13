@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-test:
+  lint-and-unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,4 +28,50 @@ jobs:
         run: pnpm --filter @screenwright/cli build
 
       - name: Unit tests
-        run: pnpm --filter @screenwright/cli test
+        run: pnpm --filter @screenwright/cli exec vitest run test/unit/
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @screenwright/cli build
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('cli/package.json') }}
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Cache Piper voice model
+        uses: actions/cache@v4
+        with:
+          path: ~/.screenwright/voices
+          key: piper-voice-en_US-amy-medium
+
+      - name: Install Piper TTS and voice model
+        run: |
+          pip3 install piper-tts pathvalidate
+          mkdir -p ~/.screenwright/voices
+          if [ ! -f ~/.screenwright/voices/en_US-amy-medium.onnx ]; then
+            curl -sL -o ~/.screenwright/voices/en_US-amy-medium.onnx \
+              "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/medium/en_US-amy-medium.onnx"
+            curl -sL -o ~/.screenwright/voices/en_US-amy-medium.onnx.json \
+              "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/amy/medium/en_US-amy-medium.onnx.json"
+          fi
+
+      - name: Integration tests
+        run: pnpm --filter @screenwright/cli exec vitest run test/integration/

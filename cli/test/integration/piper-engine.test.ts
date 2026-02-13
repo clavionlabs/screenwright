@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { synthesize } from '../../src/voiceover/piper-engine.js';
 import { downloadPiper, downloadVoiceModel, DEFAULT_VOICE } from '../../src/voiceover/voice-models.js';
 
-describe('Piper TTS on macOS ARM64', () => {
+describe('Piper TTS', () => {
   it('downloadPiper resolves to a working binary', async () => {
     const bin = await downloadPiper();
     expect(bin).toBeTruthy();
