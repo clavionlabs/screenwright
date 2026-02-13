@@ -1,5 +1,5 @@
 import React from 'react';
-import { Composition } from 'remotion';
+import { Composition, registerRoot } from 'remotion';
 import { z } from 'zod';
 import { DemoVideo } from './DemoVideo.js';
 import { timelineSchema } from '../timeline/schema.js';
@@ -50,3 +50,5 @@ export const RemotionRoot: React.FC = () => {
     </>
   );
 };
+
+registerRoot(RemotionRoot);

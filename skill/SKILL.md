@@ -2,7 +2,7 @@
 name: screenwright
 description: Turn Playwright E2E tests into polished product demo videos
 user_invocable: true
-version: 0.1.4
+version: 0.1.5
 ---
 
 # Screenwright
@@ -35,25 +35,23 @@ grep -qxF '.screenwright' .gitignore 2>/dev/null || echo '.screenwright' >> .git
 
 Follow these steps in order. Ask each question and wait for the user's response before proceeding.
 
-### Step 1: Discover Tests
+### Step 1: Discover Tests & Get Video Topic
 
 Search for Playwright test files:
 ```bash
 find . -name "*.spec.ts" -o -name "*.test.ts" | grep -v node_modules | sort
 ```
 
-Present the results as a numbered list:
+Do NOT list the individual test files. Simply confirm they exist and ask what the video should be about:
 ```
-Found N Playwright tests:
-  1. tests/login.spec.ts
-  2. tests/checkout.spec.ts
-  ...
-Which test should I turn into a demo video?
+Found N Playwright tests. What would you like your demo video to show?
 ```
+
+The user will describe a feature or flow in plain language (e.g. "our sharing feature", "the onboarding flow", "how dashboards work"). Use their description to identify the relevant test file(s) in Step 3.
 
 ### Step 2: Get User Preferences
 
-After the user selects a test, ask these questions:
+After the user describes what they want, ask these questions:
 
 1. **"Replace test fixtures with realistic data?"** (y/n)
    - If yes: **"Brief description of the app?"** (used for context in data generation)
@@ -64,7 +62,7 @@ After the user selects a test, ask these questions:
 
 ### Step 3: Generate Demo Scenario
 
-Read the selected test file. Then generate a demo scenario TypeScript file.
+Based on the user's description, read the test files that are most relevant to the requested topic. You may read multiple test files to combine flows into a single cohesive demo. Then generate a demo scenario TypeScript file.
 
 The scenario must:
 - Import `ScreenwrightHelpers` from `screenwright`
