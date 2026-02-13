@@ -1,7 +1,7 @@
 import { mkdir, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -61,10 +61,74 @@ function getPiperDownloadUrl(): string {
   throw new Error(`Unsupported platform: ${platform}`);
 }
 
-export async function downloadPiper(): Promise<string> {
-  const binPath = getPiperBinPath();
-  if (await exists(binPath)) return binPath;
+async function findPythonPiper(): Promise<string | null> {
+  // Check common pip install locations for the piper CLI
+  for (const cmd of ['piper', `${homedir()}/Library/Python/3.9/bin/piper`]) {
+    try {
+      await execFileAsync(cmd, ['--help']);
+      return cmd;
+    } catch {
+      // not found, try next
+    }
+  }
+  return null;
+}
 
+async function installPythonPiper(): Promise<string> {
+  console.log('Installing piper-tts via pip3 (native ARM64 support)...');
+  await execFileAsync('pip3', ['install', 'piper-tts', 'pathvalidate']);
+
+  const pipPiper = await findPythonPiper();
+  if (!pipPiper) {
+    throw new Error(
+      'pip3 install piper-tts succeeded but piper binary not found on PATH. ' +
+      'Try: pip3 install piper-tts pathvalidate, then add pip bin dir to PATH.',
+    );
+  }
+  console.log('piper-tts installed successfully.');
+  return pipPiper;
+}
+
+async function verifyNativeBinary(binPath: string): Promise<boolean> {
+  try {
+    const proc = spawn('file', [binPath]);
+    const chunks: Buffer[] = [];
+    proc.stdout.on('data', (d: Buffer) => chunks.push(d));
+    await new Promise<void>((resolve) => proc.on('close', () => resolve()));
+    const output = Buffer.concat(chunks).toString();
+
+    // On ARM64 mac, an x86_64-only binary won't run without Rosetta
+    if (process.platform === 'darwin' && process.arch === 'arm64') {
+      if (output.includes('x86_64') && !output.includes('arm64')) {
+        // Check if Rosetta can run it
+        try {
+          await execFileAsync(binPath, ['--help']);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+    }
+    // Quick sanity check
+    await execFileAsync(binPath, ['--help']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function downloadPiper(): Promise<string> {
+  // First check if we already have a working Python piper
+  const existingPython = await findPythonPiper();
+  if (existingPython) return existingPython;
+
+  // Try native binary
+  const binPath = getPiperBinPath();
+  if (await exists(binPath) && await verifyNativeBinary(binPath)) {
+    return binPath;
+  }
+
+  // Download native binary
   const binDir = join(getScreenwrightDir(), 'bin');
   await mkdir(binDir, { recursive: true });
 
@@ -74,12 +138,16 @@ export async function downloadPiper(): Promise<string> {
   await execFileAsync('bash', ['-c', `
     curl -sL "${url}" | tar xz -C "${binDir}" --strip-components=1
   `]);
-
-  // Make executable
   await execFileAsync('chmod', ['+x', binPath]);
 
-  console.log('Piper installed successfully.');
-  return binPath;
+  if (await verifyNativeBinary(binPath)) {
+    console.log('Piper installed successfully.');
+    return binPath;
+  }
+
+  // Native binary doesn't run (e.g. x86_64 on ARM64 without Rosetta)
+  console.log('Native Piper binary incompatible with this architecture.');
+  return installPythonPiper();
 }
 
 export async function downloadVoiceModel(model: VoiceModel = DEFAULT_VOICE): Promise<string> {

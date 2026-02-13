@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { getPiperBinPath, getVoiceModelPath } from './voice-models.js';
+import { getVoiceModelPath, downloadPiper } from './voice-models.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,8 +14,9 @@ export async function synthesize(
   text: string,
   outputPath: string,
   modelPath?: string,
+  piperBinOverride?: string,
 ): Promise<SynthesizeResult> {
-  const piperBin = getPiperBinPath();
+  const piperBin = piperBinOverride ?? await downloadPiper();
   const model = modelPath ?? getVoiceModelPath('en_US-amy-medium');
 
   return new Promise((resolve, reject) => {
