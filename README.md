@@ -1,5 +1,9 @@
 # Screenwright
 
+[![npm version](https://img.shields.io/npm/v/screenwright)](https://www.npmjs.com/package/screenwright)
+[![CI](https://github.com/guidupuy/screenwright/actions/workflows/ci.yml/badge.svg)](https://github.com/guidupuy/screenwright/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Turn Playwright E2E tests into polished product demo videos.
 
 Screenwright analyzes your existing Playwright tests, generates a cinematic "demo scenario" with human pacing and narration, records it with video capture, then composites cursor animation and voiceover into a final MP4.
@@ -19,23 +23,32 @@ Playwright test → Demo scenario → Record with pacing → Compose video
 
 ## Installation
 
+### CLI
+
 ```bash
-npm install -g @screenwright/cli
+npm install -g screenwright
 screenwright init
 ```
 
 `screenwright init` creates a config file and downloads the Piper TTS voice model (~50MB).
 
-### Prerequisites
+**Prerequisites:** Node.js >= 20, Playwright browsers (`npx playwright install chromium`)
 
-- Node.js >= 20
-- Playwright browsers: `npx playwright install chromium`
+### Claude Code Skill
+
+Copy the skill file into your Claude Code skills directory:
+
+```bash
+mkdir -p ~/.claude/skills/screenwright
+curl -sL https://raw.githubusercontent.com/guidupuy/screenwright/main/skill/SKILL.md \
+  -o ~/.claude/skills/screenwright/SKILL.md
+```
+
+Then use `/screenwright` in Claude Code to get started.
 
 ## Quick Start
 
 ### With Claude Code (recommended)
-
-Install the skill, then:
 
 ```
 /screenwright
@@ -117,7 +130,7 @@ screenwright preview <scenario> [--out <path>]
 Generated scenarios use the `sw` helper API:
 
 ```typescript
-import type { ScreenwrightHelpers } from '@screenwright/cli';
+import type { ScreenwrightHelpers } from 'screenwright';
 
 export default async function scenario(sw: ScreenwrightHelpers) {
   await sw.scene('Getting Started');
@@ -199,4 +212,4 @@ skill/
 
 ## License
 
-Source-available. Free for personal and open-source use. Commercial license required for organizations.
+[MIT](LICENSE)
