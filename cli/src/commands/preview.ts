@@ -1,7 +1,9 @@
 import { Command } from 'commander';
 import { resolve, basename } from 'node:path';
-import { mkdir, copyFile } from 'node:fs/promises';
+import { access, mkdir, copyFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
+import ora from 'ora';
+import chalk from 'chalk';
 import { runScenario, type ScenarioFn } from '../runtime/instrumented-page.js';
 
 export const previewCommand = new Command('preview')
@@ -10,6 +12,15 @@ export const previewCommand = new Command('preview')
   .option('--out <path>', 'Output path for preview video')
   .action(async (scenario: string, opts) => {
     const scenarioPath = resolve(scenario);
+
+    try {
+      await access(scenarioPath);
+    } catch {
+      console.error(chalk.red(`Scenario file not found: ${scenarioPath}`));
+      console.error(chalk.dim('Run "screenwright generate --test <path>" to create one.'));
+      process.exit(1);
+    }
+
     const outputDir = resolve(opts.out ? resolve(opts.out, '..') : './output');
     const outputPath = opts.out
       ? resolve(opts.out)
@@ -18,24 +29,37 @@ export const previewCommand = new Command('preview')
     await mkdir(outputDir, { recursive: true });
 
     // 1. Load scenario module
-    console.log('Loading scenario...');
-    const mod = await import(pathToFileURL(scenarioPath).href);
-    const scenarioFn: ScenarioFn = mod.default;
-
-    if (typeof scenarioFn !== 'function') {
-      console.error('Scenario must export a default async function.');
+    let spinner = ora('Loading scenario').start();
+    let scenarioFn: ScenarioFn;
+    try {
+      const mod = await import(pathToFileURL(scenarioPath).href);
+      scenarioFn = mod.default;
+      if (typeof scenarioFn !== 'function') {
+        spinner.fail('Invalid scenario file');
+        console.error(chalk.red('Scenario must export a default async function.'));
+        process.exit(1);
+      }
+      spinner.succeed('Scenario loaded');
+    } catch (err: any) {
+      spinner.fail('Failed to load scenario');
+      console.error(chalk.red(err.message));
       process.exit(1);
     }
 
-    // 2. Run scenario — just capture the raw video
-    console.log('Recording preview...');
-    const { videoFile, timeline } = await runScenario(scenarioFn, {
-      scenarioFile: scenarioPath,
-      testFile: scenarioPath,
-    });
+    // 2. Run scenario
+    spinner = ora('Recording preview').start();
+    try {
+      const { videoFile, timeline } = await runScenario(scenarioFn, {
+        scenarioFile: scenarioPath,
+        testFile: scenarioPath,
+      });
 
-    // 3. Copy raw WebM to output
-    await copyFile(videoFile, outputPath);
-    console.log(`Preview saved to: ${outputPath}`);
-    console.log(`  ${timeline.events.length} events recorded`);
+      await copyFile(videoFile, outputPath);
+      spinner.succeed(`Preview saved to: ${outputPath}`);
+      console.log(chalk.dim(`  ${timeline.events.length} events recorded`));
+    } catch (err: any) {
+      spinner.fail('Recording failed');
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
   });
