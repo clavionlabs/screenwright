@@ -1,7 +1,26 @@
 {
-  "name": "@screenwright/cli",
-  "version": "0.1.0",
+  "name": "screenwright",
+  "version": "0.1.1",
   "description": "Turn Playwright E2E tests into polished product demo videos",
+  "license": "MIT",
+  "author": "Guillaume Dupuy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guidupuy/screenwright.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/guidupuy/screenwright",
+  "bugs": "https://github.com/guidupuy/screenwright/issues",
+  "keywords": [
+    "playwright",
+    "video",
+    "demo",
+    "screencast",
+    "remotion",
+    "e2e",
+    "testing",
+    "recording"
+  ],
   "type": "module",
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
@@ -12,11 +31,14 @@
     "screenwright": "./dist/bin/screenwright.js"
   },
   "scripts": {
+    "prebuild": "node --input-type=commonjs -e \"require('fs').writeFileSync('src/version.ts', 'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';\\n')\"",
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "prepack": "cp ../LICENSE .",
+    "postpack": "rm -f LICENSE"
   },
   "dependencies": {
     "@remotion/bundler": "^4.0.0",
@@ -41,6 +63,7 @@
   },
   "files": [
     "dist",
-    "assets"
+    "assets",
+    "LICENSE"
   ]
 }

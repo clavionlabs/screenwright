@@ -8,3 +8,4 @@ dist/
 *.mp4
 *.wav
 .screenwright/
+cli/src/version.ts
