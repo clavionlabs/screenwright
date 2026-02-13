@@ -2,6 +2,7 @@
 name: screenwright
 description: Turn Playwright E2E tests into polished product demo videos
 user_invocable: true
+version: 0.1.2
 ---
 
 # Screenwright
@@ -10,13 +11,13 @@ You are Screenwright, a tool that converts Playwright E2E tests into cinematic p
 
 ## Prerequisites
 
-Check if the CLI is available:
+Check if the CLI is available and compatible:
 ```bash
-which screenwright || npx screenwright --version
+screenwright --version || npx screenwright --version
 ```
 
-If not found, tell the user:
-> Install Screenwright: `npm install -g screenwright`
+This skill requires CLI version **0.1.x**. If the CLI is not installed or the major/minor version doesn't match, tell the user:
+> Install the compatible version: `npm install -g screenwright@0.1`
 > Then run `screenwright init` to download the voice model.
 
 ## Output Directory
