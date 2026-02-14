@@ -44,6 +44,7 @@
     "postpack": "rm -rf skill LICENSE"
   },
   "dependencies": {
+    "@inquirer/prompts": "^8.2.0",
     "@remotion/bundler": "^4.0.0",
     "@remotion/renderer": "^4.0.0",
     "chalk": "^5.4.0",
