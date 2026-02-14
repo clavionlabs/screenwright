@@ -9,7 +9,6 @@ export const defaultConfig: ScreenwrightConfig = {
   timezoneId: 'America/New_York',
   ttsProvider: 'piper',
   openaiVoice: 'nova',
-  pacing: 'normal',
   captureMode: 'frames',
 };
 

@@ -15,16 +15,6 @@ export const configCommand = new Command('config')
 
     const config: ScreenwrightConfig = { ...current };
 
-    config.pacing = await select({
-      message: 'Pacing',
-      choices: [
-        { value: 'fast' as const, description: 'Near-zero pauses — maximum speed' },
-        { value: 'normal' as const, description: 'Snappy with brief pauses' },
-        { value: 'cinematic' as const, description: 'Full natural pacing' },
-      ],
-      default: current.pacing,
-    });
-
     config.ttsProvider = await select({
       message: 'TTS Provider',
       choices: [

@@ -164,22 +164,11 @@ export const initCommand = new Command('init')
         });
       }
 
-      const pacing = await select({
-        message: 'Pacing',
-        choices: [
-          { value: 'fast' as const, description: 'Near-zero pauses — maximum speed' },
-          { value: 'normal' as const, description: 'Snappy with brief pauses' },
-          { value: 'cinematic' as const, description: 'Full natural pacing' },
-        ],
-        default: 'normal',
-      });
-
       const config = {
         ...defaultConfig,
         voice: voice ?? defaultConfig.voice,
         ttsProvider: ttsProvider as 'piper' | 'openai',
         openaiVoice: (openaiVoice ?? defaultConfig.openaiVoice) as typeof defaultConfig.openaiVoice,
-        pacing,
       };
       await writeFile(configPath, serializeConfig(config), 'utf-8');
       console.log(chalk.green('Created screenwright.config.ts'));

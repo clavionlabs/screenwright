@@ -19,7 +19,6 @@ export const configSchema = z.object({
   timezoneId: z.string().default('America/New_York'),
   ttsProvider: z.enum(['piper', 'openai']).default('piper'),
   openaiVoice: z.enum(openaiVoices).default('nova'),
-  pacing: z.enum(['fast', 'normal', 'cinematic']).default('normal'),
   captureMode: z.enum(['frames', 'video']).default('frames'),
 });
 

@@ -22,7 +22,7 @@ Rules:
 2. Export a default async function
 3. Replace ALL test/faker data with realistic human-friendly values
 4. Add narration to key actions explaining what the user is doing
-5. Use sw.wait() sparingly — only at scene transitions. Screenwright adds natural pacing automatically.
+5. Use sw.wait() for pacing — add deliberate pauses where the viewer needs a moment to absorb the screen.
 6. Use sw.scene() to organize into 2-5 scenes
 7. Keep the same user flow as the original test
 8. Do NOT include assertions — this is a demo, not a test

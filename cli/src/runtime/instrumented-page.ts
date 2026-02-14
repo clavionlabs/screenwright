@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Timeline, FrameEntry } from '../timeline/types.js';
 import { TimelineCollector } from './timeline-collector.js';
-import { createHelpers, getPacingMultiplier, getNarrationOverlap, type ScreenwrightHelpers, type Pacing } from './action-helpers.js';
+import { createHelpers, type ScreenwrightHelpers } from './action-helpers.js';
 
 export type ScenarioFn = (sw: ScreenwrightHelpers) => Promise<void>;
 
@@ -15,7 +15,6 @@ export interface RunOptions {
   colorScheme?: 'light' | 'dark';
   locale?: string;
   timezoneId?: string;
-  pacing?: Pacing;
   captureMode?: 'frames' | 'video';
 }
 
@@ -57,10 +56,6 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
 
   const page = await context.newPage();
   const collector = new TimelineCollector();
-  const pacing = opts.pacing ?? 'normal';
-  const pm = getPacingMultiplier(pacing);
-  const narrationOverlap = getNarrationOverlap(pacing);
-
   let frameManifest: FrameEntry[] | undefined;
   let onFrame: (() => Promise<void>) | undefined;
   let virtualTime = false;
@@ -91,12 +86,7 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
   }
 
   collector.start();
-  const sw = createHelpers(page, collector, {
-    pacingMultiplier: pm,
-    narrationOverlap,
-    onFrame,
-    virtualTime,
-  });
+  const sw = createHelpers(page, collector, { onFrame, virtualTime });
 
   await scenario(sw);
 

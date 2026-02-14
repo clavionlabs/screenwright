@@ -17,7 +17,6 @@ export const composeCommand = new Command('compose')
   .option('--resolution <res>', 'Video resolution', '1280x720')
   .option('--no-voiceover', 'Disable voiceover')
   .option('--no-cursor', 'Disable cursor overlay')
-  .option('--pacing <mode>', 'Pacing mode: fast, normal, cinematic', 'normal')
   .option('--capture <mode>', 'Capture mode: frames, video', 'frames')
   .option('--keep-temp', 'Keep temporary files')
   .action(async (scenario: string, opts) => {
@@ -27,12 +26,6 @@ export const composeCommand = new Command('compose')
 
     if (!width || !height) {
       console.error(chalk.red('Invalid resolution format. Use WIDTHxHEIGHT (e.g., 1280x720)'));
-      process.exit(1);
-    }
-
-    const pacing = opts.pacing ?? config.pacing ?? 'normal';
-    if (!['fast', 'normal', 'cinematic'].includes(pacing)) {
-      console.error(chalk.red(`Invalid pacing mode: ${pacing}. Use fast, normal, or cinematic.`));
       process.exit(1);
     }
 
@@ -88,7 +81,6 @@ export const composeCommand = new Command('compose')
         scenarioFile: scenarioPath,
         testFile: scenarioPath,
         viewport: { width, height },
-        pacing: pacing as 'fast' | 'normal' | 'cinematic',
         captureMode: captureMode as 'frames' | 'video',
       });
       timeline = result.timeline;

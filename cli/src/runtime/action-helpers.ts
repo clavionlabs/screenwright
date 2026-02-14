@@ -17,64 +17,33 @@ export interface ScreenwrightHelpers {
   narrate(text: string): Promise<void>;
 }
 
-export type Pacing = 'fast' | 'normal' | 'cinematic';
-
 export interface HelpersOptions {
-  pacingMultiplier?: number;
-  narrationOverlap?: number;
   onFrame?: () => Promise<void>;
   virtualTime?: boolean;
 }
 
 const NARRATION_WPM = 150;
-const POST_ACTION_DELAY_MS = 300;
-const PAGE_LOAD_WAIT_MS = 600;
 const CHAR_TYPE_DELAY_MS = 30;
 const CURSOR_MOVE_MIN_MS = 200;
 const CURSOR_MOVE_MAX_MS = 800;
 const SETTLE_MS = 150;
-
-const NARRATION_OVERLAP: Record<Pacing, number> = {
-  fast: 0.15,
-  normal: 0.5,
-  cinematic: 0.85,
-};
-
-export function getPacingMultiplier(pacing: Pacing): number {
-  switch (pacing) {
-    case 'fast': return 0.15;
-    case 'normal': return 0.5;
-    case 'cinematic': return 1.0;
-  }
-}
-
-export function getNarrationOverlap(pacing: Pacing): number {
-  return NARRATION_OVERLAP[pacing];
-}
 
 function estimateNarrationMs(text: string): number {
   const words = text.split(/\s+/).length;
   return Math.round((words / NARRATION_WPM) * 60 * 1000);
 }
 
-export function calculateMoveDuration(fromX: number, fromY: number, toX: number, toY: number, pacingMultiplier = 1.0): number {
+export function calculateMoveDuration(fromX: number, fromY: number, toX: number, toY: number): number {
   const distance = Math.sqrt((toX - fromX) ** 2 + (toY - fromY) ** 2);
-  const base = Math.min(CURSOR_MOVE_MAX_MS, Math.max(CURSOR_MOVE_MIN_MS, Math.round(200 * Math.log2(distance / 10 + 1))));
-  return Math.round(base * pacingMultiplier);
+  return Math.min(CURSOR_MOVE_MAX_MS, Math.max(CURSOR_MOVE_MIN_MS, Math.round(200 * Math.log2(distance / 10 + 1))));
 }
 
 export function createHelpers(page: Page, collector: TimelineCollector, opts?: HelpersOptions): ScreenwrightHelpers {
-  const pm = opts?.pacingMultiplier ?? 1.0;
-  const narrationOverlap = opts?.narrationOverlap ?? 0.6;
   const onFrame = opts?.onFrame;
   const virtual = opts?.virtualTime ?? false;
 
   let lastX = 640;
   let lastY = 360;
-
-  function scaled(ms: number): number {
-    return Math.round(ms * pm);
-  }
 
   async function timedWait(ms: number, settle?: number): Promise<void> {
     if (virtual) {
@@ -88,17 +57,13 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
 
   async function emitNarration(text: string): Promise<void> {
     const estimatedMs = estimateNarrationMs(text);
-    // Wait at least the full narration duration to prevent overlap,
-    // plus optional breathing room controlled by narrationOverlap * pm.
-    const padding = Math.round(estimatedMs * narrationOverlap * pm);
-    const actualWaitMs = estimatedMs + padding;
     collector.emit({ type: 'narration', text });
-    collector.emit({ type: 'wait', durationMs: actualWaitMs, reason: 'narration_sync' as const });
-    await timedWait(actualWaitMs, 0);
+    collector.emit({ type: 'wait', durationMs: estimatedMs, reason: 'narration_sync' as const });
+    await timedWait(estimatedMs, 0);
   }
 
   async function moveCursorTo(toX: number, toY: number): Promise<void> {
-    const moveDurationMs = calculateMoveDuration(lastX, lastY, toX, toY, pm);
+    const moveDurationMs = calculateMoveDuration(lastX, lastY, toX, toY);
     collector.emit({
       type: 'cursor_target',
       fromX: lastX, fromY: lastY,
@@ -128,7 +93,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
 
     async navigate(url, actionOpts) {
       if (actionOpts?.narration) await emitNarration(actionOpts.narration);
-
       collector.emit({
         type: 'action',
         action: 'navigate',
@@ -138,17 +102,12 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
       });
       await page.goto(url, { waitUntil: 'domcontentloaded' });
       await onFrame?.();
-      const waitMs = scaled(PAGE_LOAD_WAIT_MS);
-      collector.emit({ type: 'wait', durationMs: waitMs, reason: 'page_load' as const });
-      await timedWait(waitMs);
     },
 
     async click(selector, actionOpts) {
       if (actionOpts?.narration) await emitNarration(actionOpts.narration);
-
       const center = await resolveCenter(selector);
       await moveCursorTo(center.x, center.y);
-
       const locator = page.locator(selector).first();
       const box = await locator.boundingBox();
       collector.emit({
@@ -160,42 +119,33 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
       });
       await locator.click();
       await onFrame?.();
-      await timedWait(scaled(POST_ACTION_DELAY_MS));
     },
 
     async fill(selector, value, actionOpts) {
       if (actionOpts?.narration) await emitNarration(actionOpts.narration);
-
       const center = await resolveCenter(selector);
       await moveCursorTo(center.x, center.y);
-
       const locator = page.locator(selector).first();
       const box = await locator.boundingBox();
       await locator.click();
-
-      const charDelay = scaled(CHAR_TYPE_DELAY_MS);
       collector.emit({
         type: 'action',
         action: 'fill',
         selector,
         value,
-        durationMs: value.length * charDelay,
+        durationMs: value.length * CHAR_TYPE_DELAY_MS,
         boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
       });
-
       for (const char of value) {
-        await page.keyboard.type(char, { delay: charDelay });
+        await page.keyboard.type(char, { delay: CHAR_TYPE_DELAY_MS });
       }
       await onFrame?.();
-      await timedWait(scaled(POST_ACTION_DELAY_MS));
     },
 
     async hover(selector, actionOpts) {
       if (actionOpts?.narration) await emitNarration(actionOpts.narration);
-
       const center = await resolveCenter(selector);
       await moveCursorTo(center.x, center.y);
-
       const locator = page.locator(selector).first();
       const box = await locator.boundingBox();
       collector.emit({
@@ -207,12 +157,10 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
       });
       await locator.hover();
       await onFrame?.();
-      await timedWait(scaled(POST_ACTION_DELAY_MS));
     },
 
     async press(key, actionOpts) {
       if (actionOpts?.narration) await emitNarration(actionOpts.narration);
-
       collector.emit({
         type: 'action',
         action: 'press',
@@ -222,7 +170,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
       });
       await page.keyboard.press(key);
       await onFrame?.();
-      await timedWait(scaled(POST_ACTION_DELAY_MS));
     },
 
     async wait(ms) {
