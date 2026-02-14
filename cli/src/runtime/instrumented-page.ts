@@ -1,4 +1,4 @@
-import { chromium, type CDPSession } from 'playwright';
+import { chromium } from 'playwright';
 import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -42,10 +42,8 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
     timezoneId: opts.timezoneId ?? 'America/New_York',
   };
 
-  const physicalSize = { width: viewport.width * DPR, height: viewport.height * DPR };
-
   if (captureMode === 'video') {
-    contextOpts.recordVideo = { dir: tempDir, size: physicalSize };
+    contextOpts.recordVideo = { dir: tempDir, size: viewport };
   }
 
   const context = await browser.newContext(contextOpts);
@@ -60,61 +58,62 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
   const page = await context.newPage();
   const collector = new TimelineCollector();
   let frameManifest: FrameEntry[] | undefined;
-  let cdpSession: CDPSession | undefined;
-  let pendingFrame: Promise<void> = Promise.resolve();
+  let captureTimer: ReturnType<typeof setInterval> | undefined;
+  let frameCounter = 0;
+  let capturing = false;
 
   if (captureMode === 'frames') {
     const framesDir = join(tempDir, 'frames');
     await mkdir(framesDir, { recursive: true });
     frameManifest = [];
-    let frameCounter = 0;
 
-    cdpSession = await context.newCDPSession(page);
-
-    cdpSession.on('Page.screencastFrame', (params: { data: string; sessionId: number }) => {
-      pendingFrame = (async () => {
-        await pendingFrame;
+    // Use page.screenshot() which captures at deviceScaleFactor resolution.
+    // CDP screencast ignores DPR — screenshots are the only reliable way to
+    // get true 2× frames.
+    captureTimer = setInterval(() => {
+      if (capturing) return;
+      capturing = true;
+      (async () => {
         try {
           frameCounter++;
           const filename = `frame-${String(frameCounter).padStart(6, '0')}.jpg`;
           const filePath = join(framesDir, filename);
-          await writeFile(filePath, Buffer.from(params.data, 'base64'));
+          await page.screenshot({ path: filePath, type: 'jpeg', quality: 95 });
           frameManifest!.push({
             timestampMs: collector.elapsed(),
             file: `frames/${filename}`,
           });
-          await cdpSession!.send('Page.screencastFrameAck', { sessionId: params.sessionId });
         } catch {
-          // Frame write failed, skip
+          // Page may not be ready or is closing
         }
+        capturing = false;
       })();
-    });
+    }, 100);
   }
 
   collector.start();
 
-  if (cdpSession) {
-    await cdpSession.send('Page.startScreencast', {
-      format: 'jpeg',
-      quality: 95,
-      maxWidth: physicalSize.width,
-      maxHeight: physicalSize.height,
-      everyNthFrame: 1,
-    });
-  }
-
-  const sw = createHelpers(page, collector, DPR);
+  const sw = createHelpers(page, collector);
 
   let videoFile: string | undefined;
   try {
     await scenario(sw);
 
-    // Stop screencast and flush pending frames
-    if (cdpSession) {
-      await page.waitForTimeout(100);
-      await cdpSession.send('Page.stopScreencast').catch(() => {});
-      await pendingFrame;
-      await cdpSession.detach().catch(() => {});
+    // Stop frame capture and take one final screenshot
+    if (captureTimer) {
+      clearInterval(captureTimer);
+      try {
+        frameCounter++;
+        const filename = `frame-${String(frameCounter).padStart(6, '0')}.jpg`;
+        const filePath = join(join(tempDir, 'frames'), filename);
+        await page.screenshot({ path: filePath, type: 'jpeg', quality: 95 });
+        frameManifest!.push({
+          timestampMs: collector.elapsed(),
+          file: `frames/${filename}`,
+        });
+      } catch {
+        // Page may already be closing
+      }
     }
 
     // Close page to finalize video
@@ -125,6 +124,7 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
       videoFile = video ? await video.path() : undefined;
     }
   } finally {
+    if (captureTimer) clearInterval(captureTimer);
     // Ensure browser resources are always cleaned up (idempotent if already closed)
     await page.close().catch(() => {});
     await context.close().catch(() => {});
@@ -140,7 +140,7 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
     testFile: opts.testFile,
     scenarioFile: opts.scenarioFile,
     recordedAt: new Date().toISOString(),
-    viewport: physicalSize,
+    viewport,
     videoDurationMs,
     videoFile,
     frameManifest,

@@ -2,12 +2,14 @@ import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition } from '@remotion/renderer';
 import { resolve, basename } from 'node:path';
 import type { Timeline } from '../timeline/types.js';
+import type { BrandingConfig } from '../config/config-schema.js';
 
 export interface RenderOptions {
   timeline: Timeline;
   outputPath: string;
   publicDir: string;
   entryPoint?: string;
+  branding?: BrandingConfig;
 }
 
 /**
@@ -43,10 +45,15 @@ export async function renderDemoVideo(opts: RenderOptions): Promise<string> {
 
   const staticTimeline = toStaticPaths(opts.timeline);
 
+  const inputProps: Record<string, unknown> = { timeline: staticTimeline };
+  if (opts.branding) {
+    inputProps.branding = opts.branding;
+  }
+
   const composition = await selectComposition({
     serveUrl: bundlePath,
     id: 'DemoVideo',
-    inputProps: { timeline: staticTimeline },
+    inputProps,
   });
 
   await renderMedia({
@@ -55,8 +62,9 @@ export async function renderDemoVideo(opts: RenderOptions): Promise<string> {
     codec: 'h264',
     crf: 16,
     pixelFormat: 'yuv420p',
+    scale: 2,
     outputLocation: opts.outputPath,
-    inputProps: { timeline: staticTimeline },
+    inputProps,
   });
 
   return opts.outputPath;
