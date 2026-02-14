@@ -11,6 +11,16 @@ export const DEFAULT_TTS_INSTRUCTIONS =
   'Speak in an upbeat, enthusiastic tone. This is a tech product demo video. ' +
   'Be energetic and professional, like a friendly product evangelist.';
 
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{3,8}$/, 'Must be a hex color like #4F46E5');
+
+export const brandingSchema = z.object({
+  brandColor: hexColor,
+  textColor: hexColor,
+  fontFamily: z.string().optional(),
+});
+
+export type BrandingConfig = z.infer<typeof brandingSchema>;
+
 export const configSchema = z.object({
   voice: z.string().default('en_US-amy-medium'),
   resolution: z.object({
@@ -24,6 +34,7 @@ export const configSchema = z.object({
   ttsProvider: z.enum(['piper', 'openai']).default('piper'),
   openaiVoice: z.enum(openaiVoices).default('nova'),
   openaiTtsInstructions: z.string().default(DEFAULT_TTS_INSTRUCTIONS),
+  branding: brandingSchema.optional(),
 });
 
 export type ScreenwrightConfig = z.infer<typeof configSchema>;

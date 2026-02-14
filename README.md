@@ -156,7 +156,7 @@ export default async function scenario(sw: ScreenwrightHelpers) {
 
 | Method | Description |
 |--------|-------------|
-| `sw.scene(title, description?)` | Mark a scene/chapter boundary |
+| `sw.scene(title, description?)` | Mark a scene/chapter boundary (adds a title slide when `branding` is configured) |
 | `sw.navigate(url, { narration? })` | Navigate to URL |
 | `sw.click(selector, { narration? })` | Click an element |
 | `sw.fill(selector, value, { narration? })` | Type into an input (character by character) |
@@ -185,6 +185,13 @@ const config = {
   locale: "en-US",
   colorScheme: "light",
   timezoneId: "America/New_York",
+
+  // Scene transition slides (optional)
+  branding: {
+    brandColor: "#4F46E5",       // Slide background color (hex)
+    textColor: "#FFFFFF",        // Slide text color (hex)
+    fontFamily: "Inter",         // Google Fonts family (optional)
+  },
 };
 
 export default config;

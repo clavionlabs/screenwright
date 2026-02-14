@@ -131,6 +131,7 @@ export const composeCommand = new Command('compose')
         timeline: finalTimeline,
         outputPath,
         publicDir: tempDir,
+        branding: config.branding,
       });
       spinner.succeed('Video composed');
     } catch (err: any) {
