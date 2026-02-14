@@ -32,9 +32,9 @@ export function calculateMoveDuration(fromX: number, fromY: number, toX: number,
   return Math.min(CURSOR_MOVE_MAX_MS, Math.max(CURSOR_MOVE_MIN_MS, Math.round(200 * Math.log2(distance / 10 + 1))));
 }
 
-export function createHelpers(page: Page, collector: TimelineCollector): ScreenwrightHelpers {
-  let lastX = 640;
-  let lastY = 360;
+export function createHelpers(page: Page, collector: TimelineCollector, dpr: number = 1): ScreenwrightHelpers {
+  let lastX = 640 * dpr;
+  let lastY = 360 * dpr;
 
   async function emitNarration(text: string): Promise<void> {
     const estimatedMs = estimateNarrationMs(text);
@@ -62,7 +62,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
     await locator.waitFor({ state: 'visible', timeout: 10000 });
     const box = await locator.boundingBox();
     if (!box) return { x: lastX, y: lastY };
-    return { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) };
+    return { x: Math.round((box.x + box.width / 2) * dpr), y: Math.round((box.y + box.height / 2) * dpr) };
   }
 
   function actionError(action: string, selector: string, cause: unknown): Error {
@@ -110,7 +110,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
           action: 'click',
           selector,
           durationMs: 200,
-          boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
+          boundingBox: box ? { x: Math.round(box.x * dpr), y: Math.round(box.y * dpr), width: Math.round(box.width * dpr), height: Math.round(box.height * dpr) } : null,
         });
         await locator.click();
       } catch (err) {
@@ -132,7 +132,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
           selector,
           value,
           durationMs: value.length * CHAR_TYPE_DELAY_MS,
-          boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
+          boundingBox: box ? { x: Math.round(box.x * dpr), y: Math.round(box.y * dpr), width: Math.round(box.width * dpr), height: Math.round(box.height * dpr) } : null,
         });
         for (const char of value) {
           await page.keyboard.type(char, { delay: CHAR_TYPE_DELAY_MS });
@@ -154,7 +154,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
           action: 'hover',
           selector,
           durationMs: 200,
-          boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
+          boundingBox: box ? { x: Math.round(box.x * dpr), y: Math.round(box.y * dpr), width: Math.round(box.width * dpr), height: Math.round(box.height * dpr) } : null,
         });
         await locator.hover();
       } catch (err) {

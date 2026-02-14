@@ -26,6 +26,7 @@ export interface RunResult {
 
 export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promise<RunResult> {
   const viewport = opts.viewport ?? { width: 1280, height: 720 };
+  const DPR = 2;
   const tempDir = await mkdtemp(join(tmpdir(), 'screenwright-'));
   const captureMode = opts.captureMode ?? 'frames';
 
@@ -35,14 +36,16 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
 
   const contextOpts: Record<string, unknown> = {
     viewport,
-    deviceScaleFactor: 1,
+    deviceScaleFactor: DPR,
     colorScheme: opts.colorScheme ?? 'light',
     locale: opts.locale ?? 'en-US',
     timezoneId: opts.timezoneId ?? 'America/New_York',
   };
 
+  const physicalSize = { width: viewport.width * DPR, height: viewport.height * DPR };
+
   if (captureMode === 'video') {
-    contextOpts.recordVideo = { dir: tempDir, size: viewport };
+    contextOpts.recordVideo = { dir: tempDir, size: physicalSize };
   }
 
   const context = await browser.newContext(contextOpts);
@@ -94,13 +97,13 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
     await cdpSession.send('Page.startScreencast', {
       format: 'jpeg',
       quality: 95,
-      maxWidth: viewport.width,
-      maxHeight: viewport.height,
+      maxWidth: physicalSize.width,
+      maxHeight: physicalSize.height,
       everyNthFrame: 1,
     });
   }
 
-  const sw = createHelpers(page, collector);
+  const sw = createHelpers(page, collector, DPR);
 
   let videoFile: string | undefined;
   try {
@@ -137,7 +140,7 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
     testFile: opts.testFile,
     scenarioFile: opts.scenarioFile,
     recordedAt: new Date().toISOString(),
-    viewport,
+    viewport: physicalSize,
     videoDurationMs,
     videoFile,
     frameManifest,
