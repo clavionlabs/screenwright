@@ -110,7 +110,7 @@ describe('createHelpers', () => {
     expect((events[0] as any).action).toBe('navigate');
   });
 
-  it('wait() emits a pacing wait event', async () => {
+  it('wait() emits a pacing wait event and waits real time', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
     collector.start();
@@ -123,6 +123,7 @@ describe('createHelpers', () => {
     expect(events[0].type).toBe('wait');
     expect((events[0] as any).durationMs).toBe(2000);
     expect((events[0] as any).reason).toBe('pacing');
+    expect(page.waitForTimeout).toHaveBeenCalledWith(2000);
   });
 
   it('press() emits action event with key as selector', async () => {
@@ -172,6 +173,7 @@ describe('createHelpers', () => {
 
     // 8 words → (8/150) * 60 * 1000 = 3200ms
     expect(waitEvent.durationMs).toBe(3200);
+    expect(page.waitForTimeout).toHaveBeenCalledWith(3200);
   });
 
   it('click() does not emit post-action wait', async () => {
@@ -186,52 +188,16 @@ describe('createHelpers', () => {
     expect(waits).toHaveLength(0);
   });
 
-  it('onFrame is called for click, fill, hover, press, navigate, wait', async () => {
+  it('cursor move waits real time for natural pacing', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
     collector.start();
-    const onFrame = vi.fn().mockResolvedValue(undefined);
-    const sw = createHelpers(page, collector, { onFrame });
+    const sw = createHelpers(page, collector);
 
     await sw.click('.btn');
-    expect(onFrame).toHaveBeenCalledTimes(1);
 
-    onFrame.mockClear();
-    await sw.fill('.input', 'abc');
-    expect(onFrame).toHaveBeenCalledTimes(1);
-
-    onFrame.mockClear();
-    await sw.hover('.link');
-    expect(onFrame).toHaveBeenCalledTimes(1);
-
-    onFrame.mockClear();
-    await sw.press('Enter');
-    expect(onFrame).toHaveBeenCalledTimes(1);
-
-    onFrame.mockClear();
-    await sw.navigate('http://localhost:3000');
-    expect(onFrame).toHaveBeenCalledTimes(1);
-
-    onFrame.mockClear();
-    await sw.wait(1000);
-    expect(onFrame).toHaveBeenCalledTimes(1);
-  });
-
-  it('virtualTime uses collector.advance instead of real waits', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    collector.enableVirtualTime();
-    const sw = createHelpers(page, collector, { virtualTime: true });
-
-    await sw.wait(5000);
-    // Virtual time should have advanced
-    expect(collector.elapsed()).toBe(5000);
-    // In virtual mode, page.waitForTimeout is NOT called with 5000
-    // (it may be called with settle=0, which skips)
-    const calls = page.waitForTimeout.mock.calls;
-    for (const call of calls) {
-      expect(call[0]).not.toBe(5000);
-    }
+    // cursor move should call page.waitForTimeout with the move duration
+    const cursorEvent = collector.getEvents().find(e => e.type === 'cursor_target') as any;
+    expect(page.waitForTimeout).toHaveBeenCalledWith(cursorEvent.moveDurationMs);
   });
 });

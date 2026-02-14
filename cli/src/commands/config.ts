@@ -49,7 +49,7 @@ export const configCommand = new Command('config')
     config.captureMode = await select({
       message: 'Capture Mode',
       choices: [
-        { value: 'frames' as const, description: 'JPEG screenshots with virtual time (recommended)' },
+        { value: 'frames' as const, description: 'JPEG screenshots (recommended)' },
         { value: 'video' as const, description: 'Real-time WebM recording' },
       ],
       default: current.captureMode,

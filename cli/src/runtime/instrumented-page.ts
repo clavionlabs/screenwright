@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { chromium, type CDPSession } from 'playwright';
 import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -57,8 +57,8 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
   const page = await context.newPage();
   const collector = new TimelineCollector();
   let frameManifest: FrameEntry[] | undefined;
-  let onFrame: (() => Promise<void>) | undefined;
-  let virtualTime = false;
+  let cdpSession: CDPSession | undefined;
+  let pendingFrame: Promise<void> = Promise.resolve();
 
   if (captureMode === 'frames') {
     const framesDir = join(tempDir, 'frames');
@@ -66,32 +66,51 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
     frameManifest = [];
     let frameCounter = 0;
 
-    collector.enableVirtualTime();
-    virtualTime = true;
+    cdpSession = await context.newCDPSession(page);
 
-    onFrame = async () => {
-      try {
-        frameCounter++;
-        const filename = `frame-${String(frameCounter).padStart(6, '0')}.jpg`;
-        const filePath = join(framesDir, filename);
-        await page.screenshot({ type: 'jpeg', quality: 90, path: filePath });
-        frameManifest!.push({
-          timestampMs: collector.elapsed(),
-          file: `frames/${filename}`,
-        });
-      } catch {
-        // Skip frame on failure, continue recording
-      }
-    };
+    cdpSession.on('Page.screencastFrame', (params: { data: string; sessionId: number }) => {
+      pendingFrame = (async () => {
+        await pendingFrame;
+        try {
+          frameCounter++;
+          const filename = `frame-${String(frameCounter).padStart(6, '0')}.jpg`;
+          const filePath = join(framesDir, filename);
+          await writeFile(filePath, Buffer.from(params.data, 'base64'));
+          frameManifest!.push({
+            timestampMs: collector.elapsed(),
+            file: `frames/${filename}`,
+          });
+          await cdpSession!.send('Page.screencastFrameAck', { sessionId: params.sessionId });
+        } catch {
+          // Frame write failed, skip
+        }
+      })();
+    });
   }
 
   collector.start();
-  const sw = createHelpers(page, collector, { onFrame, virtualTime });
+
+  if (cdpSession) {
+    await cdpSession.send('Page.startScreencast', {
+      format: 'jpeg',
+      quality: 90,
+      maxWidth: viewport.width,
+      maxHeight: viewport.height,
+      everyNthFrame: 1,
+    });
+  }
+
+  const sw = createHelpers(page, collector);
 
   await scenario(sw);
 
-  // Capture one final frame after scenario completes
-  if (onFrame) await onFrame();
+  // Stop screencast and flush pending frames
+  if (cdpSession) {
+    await page.waitForTimeout(100);
+    await cdpSession.send('Page.stopScreencast').catch(() => {});
+    await pendingFrame;
+    await cdpSession.detach().catch(() => {});
+  }
 
   // Close page to finalize video (only matters in video mode)
   await page.close();

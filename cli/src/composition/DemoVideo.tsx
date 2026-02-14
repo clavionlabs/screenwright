@@ -33,7 +33,12 @@ export const DemoVideo: React.FC<Props> = ({ timeline }) => {
   let baseLayer: React.ReactNode;
   if (frameManifest && frameManifest.length > 0) {
     const entry = findClosestFrame(frameManifest, timeMs);
-    baseLayer = <Img src={staticFile(entry.file)} />;
+    baseLayer = (
+      <Img
+        src={staticFile(entry.file)}
+        style={{ width: '100%', height: '100%', display: 'block' }}
+      />
+    );
   } else if (videoFile) {
     baseLayer = <OffthreadVideo src={staticFile(videoFile)} />;
   } else {

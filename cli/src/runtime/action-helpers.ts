@@ -17,16 +17,10 @@ export interface ScreenwrightHelpers {
   narrate(text: string): Promise<void>;
 }
 
-export interface HelpersOptions {
-  onFrame?: () => Promise<void>;
-  virtualTime?: boolean;
-}
-
 const NARRATION_WPM = 150;
 const CHAR_TYPE_DELAY_MS = 30;
 const CURSOR_MOVE_MIN_MS = 200;
 const CURSOR_MOVE_MAX_MS = 800;
-const SETTLE_MS = 150;
 
 function estimateNarrationMs(text: string): number {
   const words = text.split(/\s+/).length;
@@ -38,28 +32,15 @@ export function calculateMoveDuration(fromX: number, fromY: number, toX: number,
   return Math.min(CURSOR_MOVE_MAX_MS, Math.max(CURSOR_MOVE_MIN_MS, Math.round(200 * Math.log2(distance / 10 + 1))));
 }
 
-export function createHelpers(page: Page, collector: TimelineCollector, opts?: HelpersOptions): ScreenwrightHelpers {
-  const onFrame = opts?.onFrame;
-  const virtual = opts?.virtualTime ?? false;
-
+export function createHelpers(page: Page, collector: TimelineCollector): ScreenwrightHelpers {
   let lastX = 640;
   let lastY = 360;
-
-  async function timedWait(ms: number, settle?: number): Promise<void> {
-    if (virtual) {
-      collector.advance(ms);
-      const settleMs = settle ?? SETTLE_MS;
-      if (settleMs > 0) await page.waitForTimeout(settleMs);
-    } else {
-      await page.waitForTimeout(ms);
-    }
-  }
 
   async function emitNarration(text: string): Promise<void> {
     const estimatedMs = estimateNarrationMs(text);
     collector.emit({ type: 'narration', text });
     collector.emit({ type: 'wait', durationMs: estimatedMs, reason: 'narration_sync' as const });
-    await timedWait(estimatedMs, 0);
+    await page.waitForTimeout(estimatedMs);
   }
 
   async function moveCursorTo(toX: number, toY: number): Promise<void> {
@@ -71,7 +52,7 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
       moveDurationMs,
       easing: 'bezier' as const,
     });
-    await timedWait(moveDurationMs, 0);
+    await page.waitForTimeout(moveDurationMs);
     lastX = toX;
     lastY = toY;
   }
@@ -101,7 +82,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
         boundingBox: null,
       });
       await page.goto(url, { waitUntil: 'domcontentloaded' });
-      await onFrame?.();
     },
 
     async click(selector, actionOpts) {
@@ -118,7 +98,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
         boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
       });
       await locator.click();
-      await onFrame?.();
     },
 
     async fill(selector, value, actionOpts) {
@@ -139,7 +118,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
       for (const char of value) {
         await page.keyboard.type(char, { delay: CHAR_TYPE_DELAY_MS });
       }
-      await onFrame?.();
     },
 
     async hover(selector, actionOpts) {
@@ -156,7 +134,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
         boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
       });
       await locator.hover();
-      await onFrame?.();
     },
 
     async press(key, actionOpts) {
@@ -169,13 +146,11 @@ export function createHelpers(page: Page, collector: TimelineCollector, opts?: H
         boundingBox: null,
       });
       await page.keyboard.press(key);
-      await onFrame?.();
     },
 
     async wait(ms) {
       collector.emit({ type: 'wait', durationMs: ms, reason: 'pacing' as const });
-      await onFrame?.();
-      await timedWait(ms, 0);
+      await page.waitForTimeout(ms);
     },
 
     async narrate(text) {

@@ -17,7 +17,7 @@ export const composeCommand = new Command('compose')
   .option('--resolution <res>', 'Video resolution', '1280x720')
   .option('--no-voiceover', 'Disable voiceover')
   .option('--no-cursor', 'Disable cursor overlay')
-  .option('--capture <mode>', 'Capture mode: frames, video', 'frames')
+  .option('--capture <mode>', 'Capture mode: frames, video')
   .option('--keep-temp', 'Keep temporary files')
   .action(async (scenario: string, opts) => {
     const config = await loadConfig();
