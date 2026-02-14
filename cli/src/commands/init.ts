@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { writeFile, access, readFile, mkdir, copyFile } from 'node:fs/promises';
-import { resolve, dirname } from 'node:path';
+import { writeFile, access, readFile, mkdir, copyFile, rename } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { confirm, select, input } from '@inquirer/prompts';
 import ora from 'ora';
@@ -26,10 +26,12 @@ function getSkillSourcePath(): string {
   return resolve(import.meta.dirname, '..', '..', '..', 'skill', 'SKILL.md');
 }
 
+const SKILL_NAMES = ['SKILL.md', 'skill.md'];
+
 interface AssistantTarget {
   name: string;
   homeDir: string;
-  skillPath: string;
+  skillDir: string;
 }
 
 function getAssistantTargets(home: string): AssistantTarget[] {
@@ -37,14 +39,22 @@ function getAssistantTargets(home: string): AssistantTarget[] {
     {
       name: 'Claude Code',
       homeDir: resolve(home, '.claude'),
-      skillPath: resolve(home, '.claude', 'skills', 'screenwright', 'SKILL.md'),
+      skillDir: resolve(home, '.claude', 'skills', 'screenwright'),
     },
     {
       name: 'Codex',
       homeDir: resolve(home, '.codex'),
-      skillPath: resolve(home, '.codex', 'skills', 'screenwright', 'SKILL.md'),
+      skillDir: resolve(home, '.codex', 'skills', 'screenwright'),
     },
   ];
+}
+
+async function findSkillFile(skillDir: string): Promise<string | null> {
+  for (const name of SKILL_NAMES) {
+    const path = resolve(skillDir, name);
+    if (await exists(path)) return path;
+  }
+  return null;
 }
 
 export interface InstallSkillsOptions {
@@ -76,9 +86,11 @@ export async function installSkills(opts?: InstallSkillsOptions): Promise<void> 
   }
 
   for (const t of detected) {
-    const installed = await exists(t.skillPath);
-    if (installed) {
-      const current = await readFile(t.skillPath, 'utf-8');
+    const existingPath = await findSkillFile(t.skillDir);
+    const canonicalPath = resolve(t.skillDir, 'SKILL.md');
+
+    if (existingPath) {
+      const current = await readFile(existingPath, 'utf-8');
       if (current === sourceContent) {
         console.log(chalk.dim(`${t.name} skill already up to date.`));
         continue;
@@ -91,8 +103,12 @@ export async function installSkills(opts?: InstallSkillsOptions): Promise<void> 
     }
 
     try {
-      await mkdir(dirname(t.skillPath), { recursive: true });
-      await copyFile(sourcePath, t.skillPath);
+      await mkdir(t.skillDir, { recursive: true });
+      // Rename to canonical casing if needed
+      if (existingPath && existingPath !== canonicalPath) {
+        await rename(existingPath, canonicalPath);
+      }
+      await copyFile(sourcePath, canonicalPath);
       console.log(chalk.green(`Installed skill for ${t.name}.`));
     } catch (err: any) {
       console.warn(chalk.yellow(`Could not install skill for ${t.name}: ${err.message}`));

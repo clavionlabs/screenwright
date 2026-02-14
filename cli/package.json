@@ -1,6 +1,6 @@
 {
   "name": "screenwright",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Turn Playwright E2E tests into polished product demo videos",
   "license": "MIT",
   "author": "Guillaume Dupuy",
@@ -31,7 +31,7 @@
     "screenwright": "./dist/bin/screenwright.js"
   },
   "scripts": {
-    "generate:version": "node --input-type=commonjs -e \"require('fs').writeFileSync('src/version.ts', 'export const VERSION = ' + JSON.stringify(require('./package.json').version) + ';\\n')\"",
+    "generate:version": "node scripts/sync-version.cjs",
     "prebuild": "pnpm run generate:version",
     "build": "tsc",
     "dev": "tsc --watch",
@@ -40,7 +40,7 @@
     "prelint": "pnpm run generate:version",
     "lint": "tsc --noEmit",
     "postinstall": "node dist/src/scripts/postinstall.js || true",
-    "prepack": "mkdir -p skill && cp ../skill/SKILL.md skill/SKILL.md && cp ../LICENSE .",
+    "prepack": "mkdir -p skill && node scripts/patch-skill.cjs && cp ../LICENSE .",
     "postpack": "rm -rf skill LICENSE"
   },
   "dependencies": {

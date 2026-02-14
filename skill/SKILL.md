@@ -2,7 +2,7 @@
 name: screenwright
 description: Turn Playwright E2E tests into polished product demo videos
 user_invocable: true
-version: 0.1.10
+version: 0.0.0-dev # auto-synced from cli/package.json at build time
 ---
 
 # Screenwright
@@ -16,8 +16,8 @@ Check if the CLI is available and compatible:
 screenwright --version || npx screenwright --version
 ```
 
-This skill requires CLI version **0.1.x**. If the CLI is not installed or the major/minor version doesn't match, tell the user:
-> Install the compatible version: `npm install -g screenwright@0.1`
+This skill requires CLI version **0.0.x**. If the CLI is not installed or the major/minor version doesn't match, tell the user:
+> Install the compatible version: `npm install -g screenwright@0.0`
 > Then run `screenwright init` to download the voice model.
 
 ## Output Directory
