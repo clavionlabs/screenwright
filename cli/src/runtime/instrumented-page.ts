@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { chromium, type CDPSession } from 'playwright';
 import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -58,27 +58,33 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
   const page = await context.newPage();
   const collector = new TimelineCollector();
   let frameManifest: FrameEntry[] | undefined;
-  let captureTimer: ReturnType<typeof setInterval> | undefined;
+  let cdpSession: CDPSession | undefined;
   let frameCounter = 0;
   let capturing = false;
+  let pendingScreenshot: Promise<void> = Promise.resolve();
 
   if (captureMode === 'frames') {
     const framesDir = join(tempDir, 'frames');
     await mkdir(framesDir, { recursive: true });
     frameManifest = [];
 
-    // Use page.screenshot() which captures at deviceScaleFactor resolution.
-    // CDP screencast ignores DPR — screenshots are the only reliable way to
-    // get true 2× frames.
-    captureTimer = setInterval(() => {
+    cdpSession = await context.newCDPSession(page);
+
+    // Hybrid approach: CDP screencast detects WHEN the page changes (high fps,
+    // low overhead). On each change we take a page.screenshot() which captures
+    // at the full deviceScaleFactor resolution (2×). The screencast pixel data
+    // itself is discarded — it only serves as a timing signal.
+    cdpSession.on('Page.screencastFrame', (params: { sessionId: number }) => {
+      cdpSession!.send('Page.screencastFrameAck', { sessionId: params.sessionId }).catch(() => {});
+
       if (capturing) return;
       capturing = true;
-      (async () => {
+      pendingScreenshot = (async () => {
         try {
           frameCounter++;
           const filename = `frame-${String(frameCounter).padStart(6, '0')}.jpg`;
           const filePath = join(framesDir, filename);
-          await page.screenshot({ path: filePath, type: 'jpeg', quality: 95 });
+          await page.screenshot({ path: filePath, type: 'jpeg', quality: 90 });
           frameManifest!.push({
             timestampMs: collector.elapsed(),
             file: `frames/${filename}`,
@@ -88,10 +94,20 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
         }
         capturing = false;
       })();
-    }, 100);
+    });
   }
 
   collector.start();
+
+  if (cdpSession) {
+    await cdpSession.send('Page.startScreencast', {
+      format: 'jpeg',
+      quality: 10,
+      maxWidth: viewport.width,
+      maxHeight: viewport.height,
+      everyNthFrame: 1,
+    });
+  }
 
   const sw = createHelpers(page, collector);
 
@@ -99,14 +115,18 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
   try {
     await scenario(sw);
 
-    // Stop frame capture and take one final screenshot
-    if (captureTimer) {
-      clearInterval(captureTimer);
+    // Stop screencast and flush pending captures
+    if (cdpSession) {
+      await page.waitForTimeout(100);
+      await cdpSession.send('Page.stopScreencast').catch(() => {});
+      await pendingScreenshot;
+
+      // Take one final 2× screenshot
       try {
         frameCounter++;
         const filename = `frame-${String(frameCounter).padStart(6, '0')}.jpg`;
         const filePath = join(join(tempDir, 'frames'), filename);
-        await page.screenshot({ path: filePath, type: 'jpeg', quality: 95 });
+        await page.screenshot({ path: filePath, type: 'jpeg', quality: 90 });
         frameManifest!.push({
           timestampMs: collector.elapsed(),
           file: `frames/${filename}`,
@@ -114,6 +134,8 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
       } catch {
         // Page may already be closing
       }
+
+      await cdpSession.detach().catch(() => {});
     }
 
     // Close page to finalize video
@@ -124,7 +146,6 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
       videoFile = video ? await video.path() : undefined;
     }
   } finally {
-    if (captureTimer) clearInterval(captureTimer);
     // Ensure browser resources are always cleaned up (idempotent if already closed)
     await page.close().catch(() => {});
     await context.close().catch(() => {});
