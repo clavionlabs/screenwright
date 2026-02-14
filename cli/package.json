@@ -1,6 +1,6 @@
 {
   "name": "screenwright",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Turn Playwright E2E tests into polished product demo videos",
   "license": "MIT",
   "author": "Guillaume Dupuy",
@@ -44,6 +44,7 @@
     "postpack": "rm -rf skill LICENSE"
   },
   "dependencies": {
+    "@inquirer/prompts": "^8.2.0",
     "@remotion/bundler": "^4.0.0",
     "@remotion/renderer": "^4.0.0",
     "chalk": "^5.4.0",

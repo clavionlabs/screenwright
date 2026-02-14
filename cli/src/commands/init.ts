@@ -2,10 +2,11 @@ import { Command } from 'commander';
 import { writeFile, access, readFile, mkdir, copyFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { createInterface } from 'node:readline/promises';
+import { confirm, select, input } from '@inquirer/prompts';
 import ora from 'ora';
 import chalk from 'chalk';
 import { defaultConfig, serializeConfig } from '../config/defaults.js';
+import { openaiVoices } from '../config/config-schema.js';
 import { ensureDependencies } from '../voiceover/voice-models.js';
 
 async function exists(path: string): Promise<boolean> {
@@ -18,15 +19,7 @@ async function exists(path: string): Promise<boolean> {
 }
 
 async function askYesNo(question: string): Promise<boolean> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    const answer = await rl.question(question);
-    return answer.trim().toLowerCase() === 'y';
-  } catch {
-    return false;
-  } finally {
-    rl.close();
-  }
+  return confirm({ message: question, default: false });
 }
 
 function getSkillSourcePath(): string {
@@ -90,11 +83,11 @@ export async function installSkills(opts?: InstallSkillsOptions): Promise<void> 
         console.log(chalk.dim(`${t.name} skill already up to date.`));
         continue;
       }
-      const confirm = await ask(`${t.name} skill exists but differs. Overwrite? (y/N) `);
-      if (!confirm) continue;
+      const ok = await ask(`${t.name} skill exists but differs. Overwrite?`);
+      if (!ok) continue;
     } else {
-      const confirm = await ask(`Install skill for ${t.name}? (y/N) `);
-      if (!confirm) continue;
+      const ok = await ask(`Install skill for ${t.name}?`);
+      if (!ok) continue;
     }
 
     try {
@@ -109,9 +102,9 @@ export async function installSkills(opts?: InstallSkillsOptions): Promise<void> 
 
 export const initCommand = new Command('init')
   .description('Bootstrap config and download voice model')
-  .option('--voice <model>', 'Voice model to use', 'en_US-amy-medium')
-  .option('--tts <provider>', 'TTS provider: piper or openai', 'piper')
-  .option('--openai-voice <voice>', 'OpenAI voice name', 'nova')
+  .option('--voice <model>', 'Voice model to use')
+  .option('--tts <provider>', 'TTS provider: piper or openai')
+  .option('--openai-voice <voice>', 'OpenAI voice name')
   .option('--skip-voice-download', 'Skip downloading the voice model')
   .option('--skip-skill-install', 'Skip coding assistant skill installation')
   .action(async (opts) => {
@@ -129,21 +122,63 @@ export const initCommand = new Command('init')
     if (configExists) {
       console.log(chalk.dim('screenwright.config.ts already exists, skipping.'));
     } else {
+      // Interactive prompts for options not provided via CLI flags
+      const ttsProvider = opts.tts ?? await select({
+        message: 'TTS Provider',
+        choices: [
+          { value: 'piper', description: 'Local, offline, free' },
+          { value: 'openai', description: 'Cloud, higher quality, requires API key' },
+        ],
+        default: 'piper',
+      });
+
+      let voice = opts.voice;
+      let openaiVoice = opts.openaiVoice;
+
+      if (ttsProvider === 'piper' && !voice) {
+        voice = await input({
+          message: 'Piper voice model',
+          default: defaultConfig.voice,
+        });
+      } else if (ttsProvider === 'openai' && !openaiVoice) {
+        openaiVoice = await select({
+          message: 'OpenAI Voice',
+          choices: openaiVoices.map(v => ({ value: v })),
+          default: defaultConfig.openaiVoice,
+        });
+      }
+
+      const pacing = await select({
+        message: 'Pacing',
+        choices: [
+          { value: 'fast' as const, description: '0.5x delays — snappy, action-packed' },
+          { value: 'normal' as const, description: '1.0x delays — balanced default' },
+          { value: 'cinematic' as const, description: '1.5x delays — slow, dramatic' },
+        ],
+        default: 'normal',
+      });
+
       const config = {
         ...defaultConfig,
-        voice: opts.voice,
-        ttsProvider: opts.tts,
-        openaiVoice: opts.openaiVoice,
+        voice: voice ?? defaultConfig.voice,
+        ttsProvider: ttsProvider as 'piper' | 'openai',
+        openaiVoice: (openaiVoice ?? defaultConfig.openaiVoice) as typeof defaultConfig.openaiVoice,
+        pacing,
       };
       await writeFile(configPath, serializeConfig(config), 'utf-8');
       console.log(chalk.green('Created screenwright.config.ts'));
+
+      // Update opts so downstream steps use the chosen values
+      opts.tts = ttsProvider;
+      opts.voice = config.voice;
+      opts.openaiVoice = config.openaiVoice;
     }
 
     // Voice model (skip for OpenAI)
     if (!opts.skipVoiceDownload && opts.tts !== 'openai') {
       const spinner = ora('Downloading Piper TTS and voice model').start();
       try {
-        await ensureDependencies(opts.voice);
+        await ensureDependencies(opts.voice ?? defaultConfig.voice);
         spinner.succeed('Piper TTS and voice model ready');
       } catch (err: any) {
         spinner.warn('Could not download voice model');
