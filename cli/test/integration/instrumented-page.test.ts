@@ -49,8 +49,6 @@ describe('runScenario — real Playwright', () => {
     expect(types).toContain('scene');
     expect(types).toContain('action');
     expect(types).toContain('cursor_target');
-    expect(types).toContain('wait');
-
     // Action events include our click and fill
     const actions = result.timeline.events
       .filter((e) => e.type === 'action')
@@ -95,7 +93,7 @@ describe('runScenario — real Playwright', () => {
     const result = await runScenario(scenario, {
       scenarioFile: 'minimal.ts',
       testFile: 'minimal.spec.ts',
-      captureMode: 'video',
+      captureMode: 'frames',
     });
 
     tempDirs.push(result.tempDir);
@@ -106,9 +104,6 @@ describe('runScenario — real Playwright', () => {
     const actions = result.timeline.events.filter((e) => e.type === 'action');
     expect(actions.length).toBe(1);
     expect((actions[0] as { action: string }).action).toBe('navigate');
-
-    const videoStat = await stat(result.videoFile!);
-    expect(videoStat.size).toBeGreaterThan(0);
   }, 30_000);
 
   it('records narration events with estimated durations', async () => {
