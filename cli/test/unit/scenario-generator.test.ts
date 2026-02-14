@@ -160,22 +160,11 @@ export default async function scenario(sw: ScreenwrightHelpers) {
     expect(r.warnings.some(w => w.code === 'NO_SCENES')).toBe(true);
   });
 
-  it('warns on no waits → NO_WAITS', () => {
-    const code = `import type { ScreenwrightHelpers } from 'screenwright';
-export default async function scenario(sw: ScreenwrightHelpers) {
-  await sw.scene('test');
-  await sw.navigate('http://localhost:3000', { narration: 'hello' });
-}`;
-    const r = validateScenarioCode(code);
-    expect(r.warnings.some(w => w.code === 'NO_WAITS')).toBe(true);
-  });
-
   it('warns on no narration → NO_NARRATION', () => {
     const code = `import type { ScreenwrightHelpers } from 'screenwright';
 export default async function scenario(sw: ScreenwrightHelpers) {
   await sw.scene('test');
   await sw.click('#btn');
-  await sw.wait(1000);
 }`;
     const r = validateScenarioCode(code);
     expect(r.warnings.some(w => w.code === 'NO_NARRATION')).toBe(true);

@@ -18,6 +18,7 @@ describe('loadConfig', () => {
       expect(config.ttsProvider).toBe('piper');
       expect(config.openaiVoice).toBe('nova');
       expect(config.voice).toBe('en_US-amy-medium');
+      expect(config.pacing).toBe('normal');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

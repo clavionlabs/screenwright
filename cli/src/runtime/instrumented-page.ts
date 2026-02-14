@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Timeline } from '../timeline/types.js';
 import { TimelineCollector } from './timeline-collector.js';
-import { createHelpers, type ScreenwrightHelpers } from './action-helpers.js';
+import { createHelpers, getPacingMultiplier, getNarrationOverlap, type ScreenwrightHelpers, type Pacing } from './action-helpers.js';
 
 export type ScenarioFn = (sw: ScreenwrightHelpers) => Promise<void>;
 
@@ -15,6 +15,7 @@ export interface RunOptions {
   colorScheme?: 'light' | 'dark';
   locale?: string;
   timezoneId?: string;
+  pacing?: Pacing;
 }
 
 export interface RunResult {
@@ -51,7 +52,11 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
   const collector = new TimelineCollector();
 
   collector.start();
-  const sw = createHelpers(page, collector);
+  const pacing = opts.pacing ?? 'normal';
+  const sw = createHelpers(page, collector, {
+    pacingMultiplier: getPacingMultiplier(pacing),
+    narrationOverlap: getNarrationOverlap(pacing),
+  });
 
   await scenario(sw);
 

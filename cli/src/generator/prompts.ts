@@ -1,7 +1,6 @@
 export const SYSTEM_PROMPT = `You are Screenwright, a tool that converts Playwright E2E tests into cinematic product demo scenarios.
 
 Given a Playwright test file, generate a new TypeScript file that uses the Screenwright helpers API to create a polished demo with:
-- Natural pacing (deliberate waits between actions)
 - Human-friendly data (replace faker/test data with realistic values)
 - Narration cues (explain what's happening to the viewer)
 - Scene boundaries (organize the demo into logical chapters)
@@ -23,7 +22,7 @@ Rules:
 2. Export a default async function
 3. Replace ALL test/faker data with realistic human-friendly values
 4. Add narration to key actions explaining what the user is doing
-5. Add sw.wait() calls between logical steps for pacing
+5. Use sw.wait() sparingly — only at scene transitions. Screenwright adds natural pacing automatically.
 6. Use sw.scene() to organize into 2-5 scenes
 7. Keep the same user flow as the original test
 8. Do NOT include assertions — this is a demo, not a test
@@ -87,24 +86,20 @@ export default async function scenario(sw: ScreenwrightHelpers) {
   await sw.navigate('http://localhost:3000', {
     narration: 'Let\\'s browse the electronics store.',
   });
-  await sw.wait(1500);
 
   await sw.click('[data-testid="product-laptop"]', {
     narration: 'We\\'ll select the MacBook Pro.',
   });
-  await sw.wait(1000);
 
   await sw.scene('Adding to Cart');
   await sw.click('[data-testid="add-to-cart"]', {
     narration: 'Add it to our cart.',
   });
-  await sw.wait(1500);
 
   await sw.scene('Checkout');
   await sw.fill('[data-testid="email"]', 'sarah.chen@acme.co', {
     narration: 'Enter our email address for the order confirmation.',
   });
-  await sw.wait(1000);
 
   await sw.click('[data-testid="checkout"]', {
     narration: 'Complete the purchase.',

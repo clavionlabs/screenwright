@@ -1,5 +1,6 @@
 // Public API exports
-export type { ScreenwrightHelpers, ActionOptions } from './runtime/action-helpers.js';
+export type { ScreenwrightHelpers, ActionOptions, Pacing, HelpersOptions } from './runtime/action-helpers.js';
+export { getPacingMultiplier, getNarrationOverlap } from './runtime/action-helpers.js';
 export type { ScenarioFn } from './runtime/instrumented-page.js';
 export type { Timeline, TimelineEvent, SceneEvent, ActionEvent, CursorTargetEvent, NarrationEvent, WaitEvent } from './timeline/types.js';
 export type { ScreenwrightConfig, OpenaiVoice } from './config/config-schema.js';

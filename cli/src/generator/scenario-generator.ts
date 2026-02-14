@@ -113,11 +113,6 @@ export function validateScenarioCode(code: string): ValidationResult {
     warnings.push({ code: 'NO_SCENES', message: 'No sw.scene() calls found — consider adding scene boundaries' });
   }
 
-  // Warnings — no waits
-  if (!/\.wait\s*\(/.test(code)) {
-    warnings.push({ code: 'NO_WAITS', message: 'No sw.wait() calls found — consider adding pacing' });
-  }
-
   // Warnings — no narration
   if (!/narration/.test(code)) {
     warnings.push({ code: 'NO_NARRATION', message: 'No narration found — consider adding narration to actions' });

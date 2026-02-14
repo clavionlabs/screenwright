@@ -2,7 +2,7 @@
 name: screenwright
 description: Turn Playwright E2E tests into polished product demo videos
 user_invocable: true
-version: 0.1.8
+version: 0.1.10
 ---
 
 # Screenwright
@@ -79,7 +79,7 @@ The scenario must:
 - Organize into 2-5 scenes
 - Replace test/faker data with human-friendly values
 - Add narration to key actions
-- Add `sw.wait()` between logical steps
+- Use `sw.wait()` sparingly at scene transitions (automatic pacing is built-in)
 - NOT include any assertions
 - NOT use `page.*` methods directly — always use `sw.*` helpers
 - NOT import expect, assert, or any test library
@@ -101,11 +101,9 @@ export default async function scenario(sw: ScreenwrightHelpers) {
   await sw.click('[data-testid="login-btn"]', {
     narration: 'Click sign in.',
   });
-  await sw.wait(2000);
 
   await sw.scene('Viewing the Dashboard');
   await sw.narrate('The dashboard shows our key metrics at a glance.');
-  await sw.wait(3000);
 }
 ```
 
@@ -119,27 +117,21 @@ export default async function scenario(sw: ScreenwrightHelpers) {
   await sw.navigate('http://localhost:3000/apply', {
     narration: 'We begin on the application form.',
   });
-  await sw.wait(1500);
 
   await sw.scene('Personal Information');
   await sw.fill('[data-testid="first-name"]', 'Jordan', {
     narration: "Let's fill in our personal details.",
   });
-  await sw.wait(500);
   await sw.fill('[data-testid="last-name"]', 'Rivera');
-  await sw.wait(500);
   await sw.fill('[data-testid="email"]', 'jordan.rivera@acme.co', {
     narration: 'Add our work email.',
   });
-  await sw.wait(1000);
 
   await sw.hover('[data-testid="role-select"]', {
     narration: 'Now we select a role from the dropdown.',
   });
   await sw.click('[data-testid="role-select"]');
-  await sw.wait(800);
   await sw.click('[data-testid="role-engineering"]');
-  await sw.wait(1000);
 
   await sw.scene('Review and Submit');
   await sw.narrate('Everything looks good. Time to submit.');
@@ -148,7 +140,6 @@ export default async function scenario(sw: ScreenwrightHelpers) {
   await sw.click('[data-testid="submit-btn"]', {
     narration: 'Submit the application.',
   });
-  await sw.wait(2000);
   await sw.narrate('The application has been submitted successfully.');
 }
 ```
@@ -162,8 +153,7 @@ After generating the scenario, validate it against these rules before presenting
 3. **Must NOT** use raw `page.*()` calls — only `sw.*` helpers
 4. **Must NOT** import or call `expect()` or `assert()`
 5. **Should have** at least one `sw.scene()` call
-6. **Should have** at least one `sw.wait()` call
-7. **Should have** narration on key actions
+6. **Should have** narration on key actions
 
 If validation fails, regenerate and include the specific error messages so you can fix exactly what went wrong. Maximum 3 generation attempts before asking the user for guidance.
 

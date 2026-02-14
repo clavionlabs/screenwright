@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const openaiVoices = [
-  'alloy', 'ash', 'ballad', 'coral', 'echo',
-  'fable', 'nova', 'onyx', 'sage', 'shimmer',
+  'alloy', 'ash', 'ballad', 'cedar', 'coral', 'echo',
+  'fable', 'marin', 'nova', 'onyx', 'sage', 'shimmer', 'verse',
 ] as const;
 
 export type OpenaiVoice = (typeof openaiVoices)[number];
@@ -19,6 +19,7 @@ export const configSchema = z.object({
   timezoneId: z.string().default('America/New_York'),
   ttsProvider: z.enum(['piper', 'openai']).default('piper'),
   openaiVoice: z.enum(openaiVoices).default('nova'),
+  pacing: z.enum(['fast', 'normal', 'cinematic']).default('normal'),
 });
 
 export type ScreenwrightConfig = z.infer<typeof configSchema>;

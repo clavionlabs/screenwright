@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { calculateMoveDuration, createHelpers } from '../../src/runtime/action-helpers.js';
+import { calculateMoveDuration, createHelpers, getPacingMultiplier, getNarrationOverlap } from '../../src/runtime/action-helpers.js';
 import { TimelineCollector } from '../../src/runtime/timeline-collector.js';
 
 function mockPage() {
@@ -21,19 +21,41 @@ function mockPage() {
   } as any;
 }
 
-describe('calculateMoveDuration', () => {
-  it('returns minimum 300ms for short distances', () => {
-    expect(calculateMoveDuration(0, 0, 5, 5)).toBe(300);
+describe('getPacingMultiplier', () => {
+  it('returns 0.5 for fast', () => {
+    expect(getPacingMultiplier('fast')).toBe(0.5);
   });
 
-  it('returns maximum 1200ms for very long distances', () => {
-    expect(calculateMoveDuration(0, 0, 5000, 5000)).toBe(1200);
+  it('returns 1.0 for normal', () => {
+    expect(getPacingMultiplier('normal')).toBe(1.0);
+  });
+
+  it('returns 1.5 for cinematic', () => {
+    expect(getPacingMultiplier('cinematic')).toBe(1.5);
+  });
+});
+
+describe('calculateMoveDuration', () => {
+  it('returns minimum 200ms for short distances', () => {
+    expect(calculateMoveDuration(0, 0, 5, 5)).toBe(200);
+  });
+
+  it('returns maximum 800ms for very long distances', () => {
+    expect(calculateMoveDuration(0, 0, 5000, 5000)).toBe(800);
   });
 
   it('scales with distance', () => {
     const short = calculateMoveDuration(0, 0, 50, 50);
     const long = calculateMoveDuration(0, 0, 500, 500);
     expect(long).toBeGreaterThan(short);
+  });
+
+  it('applies pacing multiplier', () => {
+    const normal = calculateMoveDuration(0, 0, 200, 200);
+    const fast = calculateMoveDuration(0, 0, 200, 200, 0.5);
+    const cinematic = calculateMoveDuration(0, 0, 200, 200, 1.5);
+    expect(fast).toBeLessThan(normal);
+    expect(cinematic).toBeGreaterThan(normal);
   });
 });
 
@@ -83,7 +105,7 @@ describe('createHelpers', () => {
     expect(types).toContain('action');
   });
 
-  it('fill() types characters individually', async () => {
+  it('fill() types characters with scaled delay', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
     collector.start();
@@ -91,9 +113,9 @@ describe('createHelpers', () => {
 
     await sw.fill('.input', 'abc');
     expect(page.keyboard.type).toHaveBeenCalledTimes(3);
-    expect(page.keyboard.type).toHaveBeenCalledWith('a', { delay: 50 });
-    expect(page.keyboard.type).toHaveBeenCalledWith('b', { delay: 50 });
-    expect(page.keyboard.type).toHaveBeenCalledWith('c', { delay: 50 });
+    expect(page.keyboard.type).toHaveBeenCalledWith('a', { delay: 30 });
+    expect(page.keyboard.type).toHaveBeenCalledWith('b', { delay: 30 });
+    expect(page.keyboard.type).toHaveBeenCalledWith('c', { delay: 30 });
   });
 
   it('navigate() emits action + page_load wait', async () => {
@@ -111,7 +133,7 @@ describe('createHelpers', () => {
     expect((events[1] as any).reason).toBe('page_load');
   });
 
-  it('wait() emits a pacing wait event', async () => {
+  it('wait() emits a pacing wait event (unscaled)', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
     collector.start();
@@ -157,5 +179,35 @@ describe('createHelpers', () => {
     const firstTarget = cursorEvents[0] as any;
     expect(second.fromX).toBe(firstTarget.toX);
     expect(second.fromY).toBe(firstTarget.toY);
+  });
+
+  it('fast pacing scales post-action delay', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    collector.start();
+    const sw = createHelpers(page, collector, { pacingMultiplier: 0.5 });
+
+    await sw.click('.btn');
+
+    // Post-action delay: Math.round(300 * 0.5) = 150
+    const lastCall = page.waitForTimeout.mock.calls.at(-1);
+    expect(lastCall![0]).toBe(150);
+  });
+
+  it('narration overlap reduces wait duration', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    collector.start();
+    const sw = createHelpers(page, collector, { narrationOverlap: 0.4, pacingMultiplier: 1.0 });
+
+    await sw.narrate('This is a test narration with several words.');
+    const events = collector.getEvents();
+
+    const waitEvent = events.find(e => e.type === 'wait' && (e as any).reason === 'narration_sync') as any;
+    expect(waitEvent).toBeDefined();
+
+    // 8 words → (8/150) * 60 * 1000 = 3200ms estimated
+    // actualWait = Math.round(3200 * 0.4 * 1.0) = 1280
+    expect(waitEvent.durationMs).toBe(1280);
   });
 });

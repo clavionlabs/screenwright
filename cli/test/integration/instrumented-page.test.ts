@@ -109,6 +109,34 @@ describe('runScenario — real Playwright', () => {
     expect(videoStat.size).toBeGreaterThan(0);
   }, 30_000);
 
+  it('fast pacing produces shorter video duration', async () => {
+    const scenario: ScenarioFn = async (sw) => {
+      await sw.scene('Test scene');
+      await sw.navigate(FIXTURE_PAGE);
+      await sw.click('[data-testid="product-laptop"]');
+      await sw.fill('[data-testid="email"]', 'hi@test.com');
+      await sw.click('[data-testid="checkout"]');
+    };
+
+    const normalResult = await runScenario(scenario, {
+      scenarioFile: 'normal.ts',
+      testFile: 'normal.spec.ts',
+      viewport: { width: 1280, height: 720 },
+    });
+    tempDirs.push(normalResult.tempDir);
+
+    const fastResult = await runScenario(scenario, {
+      scenarioFile: 'fast.ts',
+      testFile: 'fast.spec.ts',
+      viewport: { width: 1280, height: 720 },
+      pacing: 'fast',
+    });
+    tempDirs.push(fastResult.tempDir);
+
+    expect(fastResult.timeline.metadata.videoDurationMs)
+      .toBeLessThan(normalResult.timeline.metadata.videoDurationMs);
+  }, 60_000);
+
   it('records narration events with estimated durations', async () => {
     const scenario: ScenarioFn = async (sw) => {
       await sw.navigate(FIXTURE_PAGE);
