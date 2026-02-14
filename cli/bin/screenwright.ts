@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-// Suppress MODULE_TYPELESS_PACKAGE_JSON warnings from dynamic import of user config files
+// Suppress MODULE_TYPELESS_PACKAGE_JSON warnings from dynamic import of user config files.
+// Two layers: (1) process.emit for older Node, (2) stderr.write for Node 22+ where the
+// ESM loader prints the warning directly from C++ without going through JS events.
 const _origEmit = process.emit;
 // @ts-expect-error -- monkey-patch
 process.emit = function (event: string, ...args: any[]) {
@@ -8,6 +10,14 @@ process.emit = function (event: string, ...args: any[]) {
     return false;
   }
   return _origEmit.apply(process, [event, ...args] as any);
+};
+
+const _origStderrWrite = process.stderr.write.bind(process.stderr);
+process.stderr.write = function (chunk: any, ...args: any[]) {
+  if (typeof chunk === 'string' && chunk.includes('MODULE_TYPELESS_PACKAGE_JSON')) {
+    return true;
+  }
+  return _origStderrWrite(chunk, ...args);
 };
 
 import { Command } from 'commander';
