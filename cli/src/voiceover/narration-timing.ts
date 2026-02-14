@@ -9,6 +9,7 @@ export interface NarrationOptions {
   tempDir: string;
   ttsProvider?: 'piper' | 'openai';
   openaiVoice?: OpenaiVoice;
+  openaiTtsInstructions?: string;
 }
 
 /**
@@ -34,7 +35,7 @@ export async function generateNarration(
     const outputPath = join(opts.tempDir, `narration-${narration.id}${ext}`);
 
     const result = provider === 'openai'
-      ? await openaiSynthesize(narration.text, outputPath, opts.openaiVoice)
+      ? await openaiSynthesize(narration.text, outputPath, opts.openaiVoice, opts.openaiTtsInstructions)
       : await piperSynthesize(narration.text, outputPath, opts.modelPath);
 
     events[i] = {

@@ -125,6 +125,7 @@ export const composeCommand = new Command('compose')
             modelPath,
             ttsProvider: config.ttsProvider,
             openaiVoice: config.openaiVoice,
+            openaiTtsInstructions: config.openaiTtsInstructions,
           });
           spinner.succeed(`Generated ${narrationCount} voiceover segments`);
         } catch (err: any) {

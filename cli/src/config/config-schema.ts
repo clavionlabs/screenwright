@@ -7,6 +7,10 @@ export const openaiVoices = [
 
 export type OpenaiVoice = (typeof openaiVoices)[number];
 
+export const DEFAULT_TTS_INSTRUCTIONS =
+  'Speak in an upbeat, enthusiastic tone. This is a tech product demo video. ' +
+  'Be energetic and professional, like a friendly product evangelist.';
+
 export const configSchema = z.object({
   voice: z.string().default('en_US-amy-medium'),
   resolution: z.object({
@@ -19,6 +23,7 @@ export const configSchema = z.object({
   timezoneId: z.string().default('America/New_York'),
   ttsProvider: z.enum(['piper', 'openai']).default('piper'),
   openaiVoice: z.enum(openaiVoices).default('nova'),
+  openaiTtsInstructions: z.string().default(DEFAULT_TTS_INSTRUCTIONS),
   captureMode: z.enum(['frames', 'video']).default('frames'),
 });
 

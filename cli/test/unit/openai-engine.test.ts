@@ -84,5 +84,34 @@ describe('openai-engine synthesize', () => {
     expect(body.model).toBe('gpt-4o-mini-tts');
     expect(body.voice).toBe('alloy');
     expect(body.response_format).toBe('mp3');
+    expect(body.instructions).toBeUndefined();
+  });
+
+  it('includes instructions in request body when provided', async () => {
+    const fakeBody = new ArrayBuffer(8000);
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(fakeBody),
+    });
+
+    await synthesize('Test', '/tmp/out.mp3', 'coral', 'Speak in an upbeat, enthusiastic tone.');
+
+    const call = (globalThis.fetch as any).mock.calls[0];
+    const body = JSON.parse(call[1].body);
+    expect(body.instructions).toBe('Speak in an upbeat, enthusiastic tone.');
+  });
+
+  it('omits instructions from request body when not provided', async () => {
+    const fakeBody = new ArrayBuffer(8000);
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(fakeBody),
+    });
+
+    await synthesize('Test', '/tmp/out.mp3', 'nova');
+
+    const call = (globalThis.fetch as any).mock.calls[0];
+    const body = JSON.parse(call[1].body);
+    expect(body).not.toHaveProperty('instructions');
   });
 });

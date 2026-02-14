@@ -14,6 +14,7 @@ export async function synthesize(
   text: string,
   outputPath: string,
   voice: OpenaiVoice = 'nova',
+  instructions?: string,
 ): Promise<SynthesizeResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -34,6 +35,7 @@ export async function synthesize(
       input: text,
       voice,
       response_format: 'mp3',
+      ...(instructions && { instructions }),
     }),
   });
 

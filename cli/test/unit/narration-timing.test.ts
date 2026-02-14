@@ -17,6 +17,7 @@ vi.mock('../../src/voiceover/openai-engine.js', () => ({
 }));
 
 import { generateNarration } from '../../src/voiceover/narration-timing.js';
+import { synthesize as openaiSynthesize } from '../../src/voiceover/openai-engine.js';
 
 function makeTimeline(events: Timeline['events']): Timeline {
   return {
@@ -130,5 +131,25 @@ describe('generateNarration', () => {
 
     const wait = result.events[1] as any;
     expect(wait.durationMs).toBe(5000);
+  });
+
+  it('passes openaiTtsInstructions to the openai engine', async () => {
+    const timeline = makeTimeline([
+      { type: 'narration', id: 'ev-001', timestampMs: 0, text: 'Hello' },
+    ]);
+
+    await generateNarration(timeline, {
+      tempDir: '/tmp',
+      ttsProvider: 'openai',
+      openaiVoice: 'coral',
+      openaiTtsInstructions: 'Be upbeat and enthusiastic.',
+    });
+
+    expect(openaiSynthesize).toHaveBeenCalledWith(
+      'Hello',
+      expect.stringMatching(/narration-ev-001\.mp3$/),
+      'coral',
+      'Be upbeat and enthusiastic.',
+    );
   });
 });

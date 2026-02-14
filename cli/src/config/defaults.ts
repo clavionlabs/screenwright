@@ -1,4 +1,4 @@
-import type { ScreenwrightConfig } from './config-schema.js';
+import { DEFAULT_TTS_INSTRUCTIONS, type ScreenwrightConfig } from './config-schema.js';
 
 export const defaultConfig: ScreenwrightConfig = {
   voice: 'en_US-amy-medium',
@@ -9,6 +9,7 @@ export const defaultConfig: ScreenwrightConfig = {
   timezoneId: 'America/New_York',
   ttsProvider: 'piper',
   openaiVoice: 'nova',
+  openaiTtsInstructions: DEFAULT_TTS_INSTRUCTIONS,
   captureMode: 'frames',
 };
 
