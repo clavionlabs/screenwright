@@ -88,17 +88,13 @@ export const composeCommand = new Command('compose')
       spinner.succeed(`Recorded ${timeline.events.length} events`);
     } catch (err: any) {
       spinner.fail('Recording failed');
+      console.error(chalk.red(err.message));
       if (err.message.includes('Executable doesn\'t exist') || err.message.includes('browserType.launch')) {
-        console.error(chalk.red('Playwright browsers not installed.'));
         console.error(chalk.dim('Run: npx playwright install chromium'));
       } else if (err.message.includes('net::ERR_CONNECTION_REFUSED')) {
-        console.error(chalk.red('Could not connect to the app.'));
         console.error(chalk.dim('Make sure your dev server is running.'));
       } else if (err.message.includes('Timeout') || err.message.includes('waiting for')) {
-        console.error(chalk.red('Timed out waiting for an element.'));
         console.error(chalk.dim('Check that selectors in the scenario match your app.'));
-      } else {
-        console.error(chalk.red(err.message));
       }
       process.exit(1);
     }

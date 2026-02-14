@@ -65,6 +65,16 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
     return { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) };
   }
 
+  function actionError(action: string, selector: string, cause: unknown): Error {
+    const url = page.url();
+    const msg = cause instanceof Error ? cause.message : String(cause);
+    const err = new Error(
+      `sw.${action}(${JSON.stringify(selector)}) failed on ${url}\n${msg}`,
+    );
+    err.cause = cause;
+    return err;
+  }
+
   return {
     page,
 
@@ -81,59 +91,75 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
         durationMs: 0,
         boundingBox: null,
       });
-      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded' });
+      } catch (err) {
+        throw actionError('navigate', url, err);
+      }
     },
 
     async click(selector, actionOpts) {
       if (actionOpts?.narration) await emitNarration(actionOpts.narration);
-      const center = await resolveCenter(selector);
-      await moveCursorTo(center.x, center.y);
-      const locator = page.locator(selector).first();
-      const box = await locator.boundingBox();
-      collector.emit({
-        type: 'action',
-        action: 'click',
-        selector,
-        durationMs: 200,
-        boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
-      });
-      await locator.click();
+      try {
+        const center = await resolveCenter(selector);
+        await moveCursorTo(center.x, center.y);
+        const locator = page.locator(selector).first();
+        const box = await locator.boundingBox();
+        collector.emit({
+          type: 'action',
+          action: 'click',
+          selector,
+          durationMs: 200,
+          boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
+        });
+        await locator.click();
+      } catch (err) {
+        throw actionError('click', selector, err);
+      }
     },
 
     async fill(selector, value, actionOpts) {
       if (actionOpts?.narration) await emitNarration(actionOpts.narration);
-      const center = await resolveCenter(selector);
-      await moveCursorTo(center.x, center.y);
-      const locator = page.locator(selector).first();
-      const box = await locator.boundingBox();
-      await locator.click();
-      collector.emit({
-        type: 'action',
-        action: 'fill',
-        selector,
-        value,
-        durationMs: value.length * CHAR_TYPE_DELAY_MS,
-        boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
-      });
-      for (const char of value) {
-        await page.keyboard.type(char, { delay: CHAR_TYPE_DELAY_MS });
+      try {
+        const center = await resolveCenter(selector);
+        await moveCursorTo(center.x, center.y);
+        const locator = page.locator(selector).first();
+        const box = await locator.boundingBox();
+        await locator.click();
+        collector.emit({
+          type: 'action',
+          action: 'fill',
+          selector,
+          value,
+          durationMs: value.length * CHAR_TYPE_DELAY_MS,
+          boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
+        });
+        for (const char of value) {
+          await page.keyboard.type(char, { delay: CHAR_TYPE_DELAY_MS });
+        }
+      } catch (err) {
+        throw actionError('fill', selector, err);
       }
     },
 
     async hover(selector, actionOpts) {
       if (actionOpts?.narration) await emitNarration(actionOpts.narration);
-      const center = await resolveCenter(selector);
-      await moveCursorTo(center.x, center.y);
-      const locator = page.locator(selector).first();
-      const box = await locator.boundingBox();
-      collector.emit({
-        type: 'action',
-        action: 'hover',
-        selector,
-        durationMs: 200,
-        boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
-      });
-      await locator.hover();
+      try {
+        const center = await resolveCenter(selector);
+        await moveCursorTo(center.x, center.y);
+        const locator = page.locator(selector).first();
+        const box = await locator.boundingBox();
+        collector.emit({
+          type: 'action',
+          action: 'hover',
+          selector,
+          durationMs: 200,
+          boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
+        });
+        await locator.hover();
+      } catch (err) {
+        throw actionError('hover', selector, err);
+      }
     },
 
     async press(key, actionOpts) {
@@ -145,7 +171,11 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
         durationMs: 100,
         boundingBox: null,
       });
-      await page.keyboard.press(key);
+      try {
+        await page.keyboard.press(key);
+      } catch (err) {
+        throw actionError('press', key, err);
+      }
     },
 
     async wait(ms) {

@@ -79,7 +79,7 @@ The scenario must:
 - Organize into 2-5 scenes
 - Replace test/faker data with human-friendly values
 - Add narration to key actions
-- Use `sw.wait()` for pacing — add deliberate pauses where the viewer needs time to absorb the screen
+- Use `sw.wait()` for pacing, adding deliberate pauses where the viewer needs time to absorb the screen. As a general rule, don't be too generous on the pauses - dead time is awkward in a demo video.
 - NOT include any assertions
 - NOT use `page.*` methods directly — always use `sw.*` helpers
 - NOT import expect, assert, or any test library

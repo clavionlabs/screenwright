@@ -102,23 +102,30 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
 
   const sw = createHelpers(page, collector);
 
-  await scenario(sw);
-
-  // Stop screencast and flush pending frames
-  if (cdpSession) {
-    await page.waitForTimeout(100);
-    await cdpSession.send('Page.stopScreencast').catch(() => {});
-    await pendingFrame;
-    await cdpSession.detach().catch(() => {});
-  }
-
-  // Close page to finalize video (only matters in video mode)
-  await page.close();
-
   let videoFile: string | undefined;
-  if (captureMode === 'video') {
-    const video = page.video();
-    videoFile = video ? await video.path() : undefined;
+  try {
+    await scenario(sw);
+
+    // Stop screencast and flush pending frames
+    if (cdpSession) {
+      await page.waitForTimeout(100);
+      await cdpSession.send('Page.stopScreencast').catch(() => {});
+      await pendingFrame;
+      await cdpSession.detach().catch(() => {});
+    }
+
+    // Close page to finalize video
+    await page.close();
+
+    if (captureMode === 'video') {
+      const video = page.video();
+      videoFile = video ? await video.path() : undefined;
+    }
+  } finally {
+    // Ensure browser resources are always cleaned up (idempotent if already closed)
+    await page.close().catch(() => {});
+    await context.close().catch(() => {});
+    await browser.close().catch(() => {});
   }
 
   const videoDurationMs = collector.getEvents().reduce((max, e) => {
@@ -138,9 +145,6 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
 
   const timelinePath = join(tempDir, 'timeline.json');
   await writeFile(timelinePath, JSON.stringify(timeline, null, 2));
-
-  await context.close();
-  await browser.close();
 
   return { timeline, videoFile, tempDir };
 }
