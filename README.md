@@ -157,7 +157,7 @@ export default async function scenario(sw: ScreenwrightHelpers) {
 | Method | Description |
 |--------|-------------|
 | `sw.scene(title)` | Mark a scene boundary (no slide) |
-| `sw.scene(title, { slide?: { duration?, brandColor?, animation?, ... } })` | Scene with optional transition slide (pass `{ slide: {} }` for defaults) |
+| `sw.scene(title, { slide?: { duration?, brandColor?, textColor?, fontFamily?, titleFontSize? } })` | Scene with optional transition slide (pass `{ slide: {} }` for defaults) |
 | `sw.navigate(url, { narration? })` | Navigate to URL |
 | `sw.click(selector, { narration? })` | Click an element |
 | `sw.fill(selector, value, { narration? })` | Type into an input (character by character) |
@@ -190,35 +190,7 @@ await sw.scene('Second Scene', { slide: { duration: 1500 } });
 | `swap` | 3D horizontal swap with rotation |
 | `cube` | 3D cube rotation between faces |
 
-### Slide Animations
-
-Scene transition slides support multiple animation styles via the `animation` option:
-
-```typescript
-await sw.scene('Getting Started', { slide: { animation: 'cinematic' } });
-```
-
-| Animation | In | Out | Style |
-|-----------|-----|-----|-------|
-| `fade` (default) | Fade + spring scale from 85% + translateY | Fade + scale to 95% | Cross Dissolve |
-| `slide-up` | Translate from below viewport + fade | Translate down + fade | Slide |
-| `slide-left` | Translate from right + fade | Translate left + fade | Push |
-| `zoom` | Scale from 0.3 with spring + fade | Scale to 1.5 + fade | Zoom |
-| `cinematic` | Bg fades, title drops with spring, description slides up staggered | All fade out | Doorway |
-| `pop` | Bouncy overshoot spring + fade | Spring shrink + fade | Spin |
-| `wipe` | Clip-path wipe from right, content fades in | Reverse wipe | Wipe |
-
-Set a default animation for all slides in your config:
-
-```typescript
-branding: {
-  brandColor: "#4F46E5",
-  textColor: "#FFFFFF",
-  animation: "cinematic",  // default animation for all slides
-},
-```
-
-Per-slide `animation` overrides the branding default.
+Transitions work between any two visual states — slides, frame-based captures, or a mix of both.
 
 ## Configuration
 
@@ -241,12 +213,11 @@ const config = {
   colorScheme: "light",
   timezoneId: "America/New_York",
 
-  // Default slide styling (used when sw.scene() is called with options)
+  // Default slide styling (used when sw.scene() is called with { slide: {} })
   branding: {
     brandColor: "#4F46E5",       // Default slide background color (hex)
     textColor: "#FFFFFF",        // Default slide text color (hex)
     fontFamily: "Inter",         // Default Google Fonts family (optional)
-    animation: "fade",           // Default slide animation (optional)
   },
 };
 

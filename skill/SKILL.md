@@ -78,7 +78,7 @@ The scenario must:
   - `sw.press(key, { narration? })` — press key
   - `sw.wait(ms)` — pause for pacing
   - `sw.narrate(text)` — speak without action
-  - `sw.transition({ type?, duration? })` — frame-level visual transition between states. type: 'fade' (default) | 'wipe' | 'slide-up' | 'slide-left' | 'zoom'. duration: ms (default 500). Use after actions to smooth visual changes (e.g. after closing a modal)
+  - `sw.transition({ type?, duration? })` — frame-level visual transition between states. type: 'fade' (default) | 'wipe' | 'slide-up' | 'slide-left' | 'zoom' | 'doorway' | 'swap' | 'cube'. duration: ms (default 500). Use after actions to smooth visual changes (e.g. after closing a modal)
 - Organize into 2-5 scenes
 - Replace test/faker data with human-friendly values
 - Add narration to key actions
