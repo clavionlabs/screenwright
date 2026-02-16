@@ -10,7 +10,7 @@ The output must be a valid TypeScript file with a default export function that t
 Available helpers:
 - sw.scene(title) — scene marker only, no slide
 - sw.scene(title, description?) — scene marker with optional description, no slide
-- sw.scene(title, { description?, slide?: { duration?, brandColor?, textColor?, fontFamily?, titleFontSize?, animation? } }) — scene with optional transition slide. animation: 'fade' (default) | 'slide-up' | 'slide-left' | 'zoom' | 'cinematic' | 'pop' | 'wipe'
+- sw.scene(title, { description?, slide?: { duration?, brandColor?, textColor?, fontFamily?, titleFontSize? } }) — scene with optional title slide (appears/disappears as a hard cut)
 - sw.navigate(url, { narration? }) — navigate to a URL
 - sw.click(selector, { narration? }) — click an element
 - sw.fill(selector, value, { narration? }) — type into an input
@@ -18,6 +18,7 @@ Available helpers:
 - sw.press(key, { narration? }) — press a keyboard key
 - sw.wait(ms) — pause for pacing
 - sw.narrate(text) — speak narration without an action
+- sw.transition({ type?, duration? }) — frame-level visual transition. Use between actions to smooth visual changes. type: 'fade' (default) | 'wipe' | 'slide-up' | 'slide-left' | 'zoom' | 'doorway' | 'swap' | 'cube'. duration: ms (default 500)
 
 Rules:
 1. Import only ScreenwrightHelpers from 'screenwright'

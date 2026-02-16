@@ -70,7 +70,7 @@ The scenario must:
 - Use the `sw.*` API exclusively:
   - `sw.scene(title)` — scene marker only, no slide
   - `sw.scene(title, description?)` — scene marker with optional description, no slide
-  - `sw.scene(title, { description?, slide?: { duration?, brandColor?, textColor?, fontFamily?, titleFontSize?, animation? } })` — scene with optional transition slide (pass `{ slide: {} }` for defaults). animation: 'fade' (default) | 'slide-up' | 'slide-left' | 'zoom' | 'cinematic' | 'pop' | 'wipe'
+  - `sw.scene(title, { description?, slide?: { duration?, brandColor?, textColor?, fontFamily?, titleFontSize? } })` — scene with optional title slide (pass `{ slide: {} }` for defaults). Appears/disappears as a hard cut
   - `sw.navigate(url, { narration? })` — navigate to URL
   - `sw.click(selector, { narration? })` — click element
   - `sw.fill(selector, value, { narration? })` — type into input (character by character)
@@ -78,6 +78,7 @@ The scenario must:
   - `sw.press(key, { narration? })` — press key
   - `sw.wait(ms)` — pause for pacing
   - `sw.narrate(text)` — speak without action
+  - `sw.transition({ type?, duration? })` — frame-level visual transition between states. type: 'fade' (default) | 'wipe' | 'slide-up' | 'slide-left' | 'zoom'. duration: ms (default 500). Use after actions to smooth visual changes (e.g. after closing a modal)
 - Organize into 2-5 scenes
 - Replace test/faker data with human-friendly values
 - Add narration to key actions

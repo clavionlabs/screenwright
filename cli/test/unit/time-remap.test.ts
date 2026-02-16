@@ -8,7 +8,7 @@ import {
   remapEvents,
 } from '../../src/composition/time-remap.js';
 import type { ResolvedSlideScene } from '../../src/composition/time-remap.js';
-import type { SceneEvent, SceneSlideConfig, ActionEvent, NarrationEvent } from '../../src/timeline/types.js';
+import type { SceneEvent, SceneSlideConfig, ActionEvent, NarrationEvent, TransitionEvent } from '../../src/timeline/types.js';
 
 function scene(timestampMs: number, title: string, opts?: { description?: string; slide?: SceneSlideConfig }): SceneEvent {
   return {
@@ -253,5 +253,20 @@ describe('remapEvents', () => {
     ];
     const result = remapEvents(events, slides);
     expect(result.map(e => e.timestampMs)).toEqual([1500, 9000, 12000]);
+  });
+
+  it('remaps transition events correctly when slides precede them', () => {
+    const slides = [ss(0)]; // 2000ms slide at t=0
+    const transition: TransitionEvent = {
+      type: 'transition',
+      id: 't-5000',
+      timestampMs: 5000,
+      transition: 'fade',
+      durationMs: 500,
+    };
+    const result = remapEvents([transition], slides);
+    // Transition at T=5000 with 2000ms slide before it -> output T=7000
+    expect(result[0].timestampMs).toBe(7000);
+    expect(result[0].type).toBe('transition');
   });
 });

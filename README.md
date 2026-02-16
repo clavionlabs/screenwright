@@ -165,6 +165,30 @@ export default async function scenario(sw: ScreenwrightHelpers) {
 | `sw.press(key, { narration? })` | Press a keyboard key |
 | `sw.wait(ms)` | Pause for pacing |
 | `sw.narrate(text)` | Speak narration without an action |
+| `sw.transition({ type, duration })` | Animate between scenes (see Transitions below) |
+
+### Transitions
+
+Add animated transitions between scenes:
+
+```typescript
+await sw.scene('First Scene', { slide: { duration: 1500 } });
+await sw.transition({ type: 'cube', duration: 800 });
+await sw.scene('Second Scene', { slide: { duration: 1500 } });
+```
+
+<video src="docs/transitions-showcase.mp4" autoplay loop muted playsinline></video>
+
+| Transition | Description |
+|------------|-------------|
+| `fade` | Cross-dissolve between scenes |
+| `wipe` | Horizontal wipe reveal |
+| `slide-up` | Slide up with push effect |
+| `slide-left` | Slide left with push effect |
+| `zoom` | Zoom in/out with fade |
+| `doorway` | Two halves split apart revealing the next scene expanding from center |
+| `swap` | 3D horizontal swap with rotation |
+| `cube` | 3D cube rotation between faces |
 
 ### Slide Animations
 

@@ -1,6 +1,6 @@
 import React from 'react';
-import { Img, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from 'remotion';
-import type { CursorTargetEvent, ActionEvent, NarrationEvent, SceneEvent } from '../timeline/types.js';
+import { Img, OffthreadVideo, staticFile, useCurrentFrame } from 'remotion';
+import type { CursorTargetEvent, ActionEvent, NarrationEvent, SceneEvent, TransitionEvent } from '../timeline/types.js';
 import type { ValidatedTimeline } from '../timeline/schema.js';
 import type { BrandingConfig } from '../config/config-schema.js';
 import { CursorOverlay } from './CursorOverlay.js';
@@ -8,7 +8,8 @@ import { NarrationTrack } from './NarrationTrack.js';
 import { SceneSlide } from './SceneSlide.js';
 import { precomputeCursorPaths } from './cursor-path.js';
 import { findClosestFrame } from './frame-lookup.js';
-import { resolveSlideScenes, sourceTimeMs, computeSlideSegments, remapEvents, msToFrames } from './time-remap.js';
+import { getTransitionStyles } from './transition-styles.js';
+import { resolveSlideScenes, sourceTimeMs, computeSlideSegments, remapEvents } from './time-remap.js';
 
 interface Props {
   timeline: ValidatedTimeline;
@@ -35,6 +36,10 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
     eventsToUse.filter((e): e is CursorTargetEvent => e.type === 'cursor_target')
   );
 
+  const transitionEvents = eventsToUse.filter(
+    (e): e is TransitionEvent => e.type === 'transition'
+  );
+
   const clickEvents = eventsToUse.filter(
     (e): e is ActionEvent => e.type === 'action' && e.action === 'click'
   );
@@ -45,22 +50,130 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
 
   const { frameManifest, videoFile } = timeline.metadata;
 
+  const slideSegments = computeSlideSegments(scenes);
+
+  function resolveSlideProps(seg: typeof slideSegments[number]) {
+    return {
+      title: seg.sceneTitle,
+      description: seg.sceneDescription,
+      brandColor: seg.slideConfig.brandColor ?? branding?.brandColor ?? '#000000',
+      textColor: seg.slideConfig.textColor ?? branding?.textColor ?? '#FFFFFF',
+      fontFamily: seg.slideConfig.fontFamily ?? branding?.fontFamily,
+      titleFontSize: seg.slideConfig.titleFontSize,
+    };
+  }
+
+  // Check if current time is inside a slide
+  let activeSlide = slideSegments.find(
+    s => outputTimeMs >= s.slideStartMs && outputTimeMs < s.slideEndMs
+  );
+
+  // Check if current time is inside a slide-to-slide transition
+  let slideTransition: {
+    transition: TransitionEvent; before: typeof slideSegments[number]; after: typeof slideSegments[number];
+  } | null = null;
+  if (!activeSlide) {
+    for (const t of transitionEvents) {
+      if (outputTimeMs < t.timestampMs || outputTimeMs >= t.timestampMs + t.durationMs) continue;
+      const tEnd = t.timestampMs + t.durationMs;
+      const before = slideSegments.find(s => Math.abs(s.slideEndMs - t.timestampMs) < 50);
+      const after = slideSegments.find(s => Math.abs(s.slideStartMs - tEnd) < 50);
+      if (before && after) { slideTransition = { transition: t, before, after }; break; }
+    }
+  }
+
+  // Fallback: if no exact match but slides exist, snap to the nearest slide.
+  // Handles timing jitter gaps (e.g. first frame at t=0 when first slide starts at t=1).
+  if (!activeSlide && !slideTransition && slideSegments.length > 0) {
+    let best = slideSegments[0];
+    let bestDist = Infinity;
+    for (const s of slideSegments) {
+      const dist = outputTimeMs < s.slideStartMs
+        ? s.slideStartMs - outputTimeMs
+        : outputTimeMs >= s.slideEndMs
+          ? outputTimeMs - s.slideEndMs
+          : 0;
+      if (dist < bestDist) { bestDist = dist; best = s; }
+    }
+    if (bestDist < 100) activeSlide = best;
+  }
+
+  // Find active transition for frame-based content
+  const activeTransition = !activeSlide && !slideTransition
+    ? transitionEvents.find(t => outputTimeMs >= t.timestampMs && outputTimeMs < t.timestampMs + t.durationMs)
+    : null;
+
   let baseLayer: React.ReactNode;
-  if (frameManifest && frameManifest.length > 0) {
+  if (activeSlide) {
+    // Slide IS the base layer — no frame images
+    baseLayer = <SceneSlide {...resolveSlideProps(activeSlide)} />;
+  } else if (slideTransition) {
+    // Slide-to-slide transition — both slides as base layer
+    const { transition: t, before, after } = slideTransition;
+    const progress = (outputTimeMs - t.timestampMs) / t.durationMs;
+    const { width: vw } = timeline.metadata.viewport;
+    const styles = getTransitionStyles(t.transition, progress, vw);
+    const afterProps = resolveSlideProps(after);
+    const beforeProps = resolveSlideProps(before);
+    const faceClip = styles.container ? {} : { overflow: 'hidden' as const };
+    const faces = (
+      <>
+        <div style={{ position: 'absolute', inset: 0, ...faceClip, ...styles.entrance }}>
+          <SceneSlide {...afterProps} />
+        </div>
+        <div style={{ position: 'absolute', inset: 0, ...faceClip, ...styles.exit }}>
+          <SceneSlide {...beforeProps} />
+        </div>
+        {styles.exit2 && (
+          <div style={{ position: 'absolute', inset: 0, ...faceClip, ...styles.exit2 }}>
+            <SceneSlide {...beforeProps} />
+          </div>
+        )}
+      </>
+    );
+    let wrappedFaces: React.ReactNode = faces;
+    if (styles.container) {
+      wrappedFaces = <div style={{ position: 'absolute', inset: 0, ...styles.container }}>{faces}</div>;
+    }
+    if (styles.perspective) {
+      wrappedFaces = <div style={{ position: 'absolute', inset: 0, perspective: styles.perspective }}>{wrappedFaces}</div>;
+    }
+    baseLayer = (
+      <>
+        <div style={{ position: 'absolute', inset: 0, backgroundColor: styles.backdrop ?? afterProps.brandColor }} />
+        {wrappedFaces}
+      </>
+    );
+  } else if (activeTransition && frameManifest && frameManifest.length > 0) {
+    const progress = (outputTimeMs - activeTransition.timestampMs) / activeTransition.durationMs;
+    const styles = getTransitionStyles(activeTransition.transition, progress, timeline.metadata.viewport.width);
+    const beforeSourceTime = slideScenes.length > 0
+      ? sourceTimeMs(activeTransition.timestampMs, slideScenes)
+      : activeTransition.timestampMs;
+    const beforeEntry = findClosestFrame(frameManifest, beforeSourceTime);
+    const afterEntry = findClosestFrame(frameManifest, timeMs);
+    baseLayer = (
+      <>
+        <Img src={staticFile(afterEntry.file)} style={{ position: 'absolute', width: '100%', height: '100%', display: 'block', ...styles.entrance }} />
+        <Img src={staticFile(beforeEntry.file)} style={{ position: 'absolute', width: '100%', height: '100%', display: 'block', ...styles.exit }} />
+        {styles.exit2 && (
+          <Img src={staticFile(beforeEntry.file)} style={{ position: 'absolute', width: '100%', height: '100%', display: 'block', ...styles.exit2 }} />
+        )}
+      </>
+    );
+  } else if (frameManifest && frameManifest.length > 0) {
     const entry = findClosestFrame(frameManifest, timeMs);
     baseLayer = (
-      <Img
-        src={staticFile(entry.file)}
-        style={{ width: '100%', height: '100%', display: 'block' }}
-      />
+      <Img src={staticFile(entry.file)} style={{ width: '100%', height: '100%', display: 'block' }} />
     );
   } else if (videoFile) {
+    if (transitionEvents.length > 0 && frame === 0) {
+      console.warn('sw.transition() effects require frame-based capture (captureMode: "frame"). Transitions will be ignored with video-based capture.');
+    }
     baseLayer = <OffthreadVideo src={staticFile(videoFile)} />;
   } else {
     throw new Error('Timeline must have either frameManifest or videoFile');
   }
-
-  const slideSegments = computeSlideSegments(scenes);
 
   return (
     <div
@@ -72,36 +185,10 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
       }}
     >
       {baseLayer}
-      <CursorOverlay cursorEvents={cursorEvents} clickEvents={clickEvents} fps={fps} />
+      {!activeSlide && !slideTransition && (
+        <CursorOverlay cursorEvents={cursorEvents} clickEvents={clickEvents} fps={fps} />
+      )}
       <NarrationTrack narrations={narrations} fps={fps} />
-
-      {slideSegments.map(seg => {
-        const brandColor = seg.slideConfig.brandColor ?? branding?.brandColor ?? '#000000';
-        const textColor = seg.slideConfig.textColor ?? branding?.textColor ?? '#FFFFFF';
-        const fontFamily = seg.slideConfig.fontFamily ?? branding?.fontFamily;
-        const titleFontSize = seg.slideConfig.titleFontSize;
-        const animation = seg.slideConfig.animation ?? branding?.animation ?? 'fade';
-
-        return (
-          <Sequence
-            key={`slide-${seg.slideStartMs}`}
-            from={msToFrames(seg.slideStartMs, fps)}
-            durationInFrames={msToFrames(seg.slideDurationMs, fps)}
-          >
-            <SceneSlide
-              title={seg.sceneTitle}
-              description={seg.sceneDescription}
-              brandColor={brandColor}
-              textColor={textColor}
-              fontFamily={fontFamily}
-              titleFontSize={titleFontSize}
-              animation={animation}
-              durationInFrames={msToFrames(seg.slideDurationMs, fps)}
-              fps={fps}
-            />
-          </Sequence>
-        );
-      })}
     </div>
   );
 };

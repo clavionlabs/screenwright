@@ -6,6 +6,7 @@ dist/
 /demos/
 *.webm
 *.mp4
+!docs/*.mp4
 *.wav
 .screenwright/
 cli/src/version.ts

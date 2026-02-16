@@ -231,37 +231,7 @@ describe('timelineSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('accepts scene slide with valid animation value', () => {
-    const timeline = {
-      ...sampleTimeline,
-      events: [{
-        type: 'scene',
-        id: 'ev-001',
-        timestampMs: 0,
-        title: 'Intro',
-        slide: { animation: 'zoom' },
-      }],
-    };
-    const result = timelineSchema.safeParse(timeline);
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects scene slide with invalid animation value', () => {
-    const bad = {
-      ...sampleTimeline,
-      events: [{
-        type: 'scene',
-        id: 'ev-001',
-        timestampMs: 0,
-        title: 'Bad',
-        slide: { animation: 'spiral' },
-      }],
-    };
-    const result = timelineSchema.safeParse(bad);
-    expect(result.success).toBe(false);
-  });
-
-  it('accepts scene slide without animation (backward compat)', () => {
+  it('accepts scene slide with duration only', () => {
     const timeline = {
       ...sampleTimeline,
       events: [{
@@ -274,6 +244,83 @@ describe('timelineSchema', () => {
     };
     const result = timelineSchema.safeParse(timeline);
     expect(result.success).toBe(true);
+  });
+
+  it('accepts valid transition event', () => {
+    const timeline = {
+      ...sampleTimeline,
+      events: [{
+        type: 'transition',
+        id: 'ev-001',
+        timestampMs: 5000,
+        transition: 'fade',
+        durationMs: 500,
+      }],
+    };
+    const result = timelineSchema.safeParse(timeline);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts all transition types', () => {
+    for (const t of ['fade', 'wipe', 'slide-up', 'slide-left', 'zoom']) {
+      const timeline = {
+        ...sampleTimeline,
+        events: [{
+          type: 'transition',
+          id: 'ev-001',
+          timestampMs: 0,
+          transition: t,
+          durationMs: 500,
+        }],
+      };
+      const result = timelineSchema.safeParse(timeline);
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('rejects transition with invalid type', () => {
+    const bad = {
+      ...sampleTimeline,
+      events: [{
+        type: 'transition',
+        id: 'ev-001',
+        timestampMs: 0,
+        transition: 'spiral',
+        durationMs: 500,
+      }],
+    };
+    const result = timelineSchema.safeParse(bad);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects transition with zero durationMs', () => {
+    const bad = {
+      ...sampleTimeline,
+      events: [{
+        type: 'transition',
+        id: 'ev-001',
+        timestampMs: 0,
+        transition: 'fade',
+        durationMs: 0,
+      }],
+    };
+    const result = timelineSchema.safeParse(bad);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects transition with negative durationMs', () => {
+    const bad = {
+      ...sampleTimeline,
+      events: [{
+        type: 'transition',
+        id: 'ev-001',
+        timestampMs: 0,
+        transition: 'fade',
+        durationMs: -100,
+      }],
+    };
+    const result = timelineSchema.safeParse(bad);
+    expect(result.success).toBe(false);
   });
 
   it('accepts empty events array', () => {

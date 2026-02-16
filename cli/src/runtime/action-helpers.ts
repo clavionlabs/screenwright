@@ -1,6 +1,6 @@
 import type { Page } from 'playwright';
 import type { TimelineCollector } from './timeline-collector.js';
-import type { SceneSlideConfig } from '../timeline/types.js';
+import type { SceneSlideConfig, TransitionType } from '../timeline/types.js';
 
 export interface ActionOptions {
   narration?: string;
@@ -9,6 +9,11 @@ export interface ActionOptions {
 export interface SceneOptions {
   description?: string;
   slide?: SceneSlideConfig;
+}
+
+export interface TransitionOptions {
+  type?: TransitionType;
+  duration?: number;
 }
 
 export interface ScreenwrightHelpers {
@@ -21,6 +26,7 @@ export interface ScreenwrightHelpers {
   press(key: string, opts?: ActionOptions): Promise<void>;
   wait(ms: number): Promise<void>;
   narrate(text: string): Promise<void>;
+  transition(opts?: TransitionOptions): Promise<void>;
 }
 
 const NARRATION_WPM = 150;
@@ -196,6 +202,19 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
 
     async narrate(text) {
       await emitNarration(text);
+    },
+
+    async transition(opts) {
+      const durationMs = opts?.duration ?? 500;
+      if (durationMs <= 0 || !Number.isFinite(durationMs)) {
+        throw new Error(`sw.transition() duration must be a positive number, got ${durationMs}`);
+      }
+      collector.emit({
+        type: 'transition',
+        transition: opts?.type ?? 'fade',
+        durationMs,
+      });
+      await page.waitForTimeout(durationMs);
     },
   };
 }

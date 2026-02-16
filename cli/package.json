@@ -1,6 +1,6 @@
 {
   "name": "screenwright",
-  "version": "0.1.31",
+  "version": "0.1.32",
   "description": "Turn Playwright E2E tests into polished product demo videos",
   "license": "MIT",
   "author": "Guillaume Dupuy",
@@ -41,7 +41,8 @@
     "lint": "tsc --noEmit",
     "postinstall": "node dist/src/scripts/postinstall.js || true",
     "prepack": "mkdir -p skill && node scripts/patch-skill.cjs && cp ../LICENSE .",
-    "postpack": "rm -rf skill LICENSE"
+    "postpack": "rm -rf skill LICENSE",
+    "showcase": "node dist/bin/screenwright.js compose scripts/showcase/scenario.js --no-voiceover --no-cursor --out output/animation-showcase.mp4"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.2.0",

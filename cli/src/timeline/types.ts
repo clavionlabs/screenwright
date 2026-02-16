@@ -24,13 +24,15 @@ export type TimelineEvent =
   | ActionEvent
   | CursorTargetEvent
   | NarrationEvent
-  | WaitEvent;
+  | WaitEvent
+  | TransitionEvent;
 
-export const slideAnimations = [
-  'fade', 'slide-up', 'slide-left', 'zoom', 'cinematic', 'pop', 'wipe',
+export const transitionTypes = [
+  'fade', 'wipe', 'slide-up', 'slide-left', 'zoom',
+  'doorway', 'swap', 'cube',
 ] as const;
 
-export type SlideAnimation = (typeof slideAnimations)[number];
+export type TransitionType = (typeof transitionTypes)[number];
 
 export interface SceneSlideConfig {
   duration?: number;
@@ -38,7 +40,6 @@ export interface SceneSlideConfig {
   textColor?: string;
   fontFamily?: string;
   titleFontSize?: number;
-  animation?: SlideAnimation;
 }
 
 export interface SceneEvent {
@@ -90,4 +91,12 @@ export interface WaitEvent {
   timestampMs: number;
   durationMs: number;
   reason: 'pacing' | 'narration_sync' | 'page_load';
+}
+
+export interface TransitionEvent {
+  type: 'transition';
+  id: string;
+  timestampMs: number;
+  transition: TransitionType;
+  durationMs: number;
 }

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { slideAnimations } from './types.js';
+import { transitionTypes } from './types.js';
 
 const sceneSlideConfigSchema = z.object({
   duration: z.number().positive().optional(),
@@ -7,7 +7,6 @@ const sceneSlideConfigSchema = z.object({
   textColor: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/).optional(),
   fontFamily: z.string().optional(),
   titleFontSize: z.number().positive().optional(),
-  animation: z.enum(slideAnimations).optional(),
 });
 
 const sceneEventSchema = z.object({
@@ -64,12 +63,21 @@ const waitEventSchema = z.object({
   reason: z.enum(['pacing', 'narration_sync', 'page_load']),
 });
 
+const transitionEventSchema = z.object({
+  type: z.literal('transition'),
+  id: z.string(),
+  timestampMs: z.number().nonnegative(),
+  transition: z.enum(transitionTypes),
+  durationMs: z.number().positive(),
+});
+
 const timelineEventSchema = z.discriminatedUnion('type', [
   sceneEventSchema,
   actionEventSchema,
   cursorTargetEventSchema,
   narrationEventSchema,
   waitEventSchema,
+  transitionEventSchema,
 ]);
 
 const frameEntrySchema = z.object({

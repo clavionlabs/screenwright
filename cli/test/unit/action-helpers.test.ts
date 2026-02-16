@@ -134,22 +134,6 @@ describe('createHelpers', () => {
     });
   });
 
-  it('scene() with animation in slide config emits correct config', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-
-    await sw.scene('Intro', {
-      slide: { animation: 'zoom' },
-    });
-    const events = collector.getEvents();
-
-    expect(events).toHaveLength(1);
-    const ev = events[0] as any;
-    expect(ev.slide).toEqual({ animation: 'zoom' });
-  });
-
   it('click() emits cursor_target then action events', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
@@ -297,5 +281,74 @@ describe('createHelpers', () => {
     // cursor move should call page.waitForTimeout with the move duration
     const cursorEvent = collector.getEvents().find(e => e.type === 'cursor_target') as any;
     expect(page.waitForTimeout).toHaveBeenCalledWith(cursorEvent.moveDurationMs);
+  });
+
+  it('transition() emits transition event with defaults', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    collector.start();
+    const sw = createHelpers(page, collector);
+
+    await sw.transition();
+    const events = collector.getEvents();
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('transition');
+    const ev = events[0] as any;
+    expect(ev.transition).toBe('fade');
+    expect(ev.durationMs).toBe(500);
+    expect(page.waitForTimeout).toHaveBeenCalledWith(500);
+  });
+
+  it('transition() passes through custom type and duration', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    collector.start();
+    const sw = createHelpers(page, collector);
+
+    await sw.transition({ type: 'wipe', duration: 800 });
+    const events = collector.getEvents();
+
+    const ev = events[0] as any;
+    expect(ev.transition).toBe('wipe');
+    expect(ev.durationMs).toBe(800);
+    expect(page.waitForTimeout).toHaveBeenCalledWith(800);
+  });
+
+  it('transition() waits for duration via page.waitForTimeout', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    collector.start();
+    const sw = createHelpers(page, collector);
+
+    await sw.transition({ duration: 300 });
+    expect(page.waitForTimeout).toHaveBeenCalledWith(300);
+  });
+
+  it('transition() throws on zero duration', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    collector.start();
+    const sw = createHelpers(page, collector);
+
+    await expect(sw.transition({ duration: 0 })).rejects.toThrow('positive number');
+  });
+
+  it('transition() throws on negative duration', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    collector.start();
+    const sw = createHelpers(page, collector);
+
+    await expect(sw.transition({ duration: -100 })).rejects.toThrow('positive number');
+  });
+
+  it('transition() throws on NaN duration', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    collector.start();
+    const sw = createHelpers(page, collector);
+
+    await expect(sw.transition({ duration: NaN })).rejects.toThrow('positive number');
   });
 });
