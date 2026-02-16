@@ -118,26 +118,34 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
     const faceClip = styles.container ? {} : { overflow: 'hidden' as const };
     const imgStyle = { width: '100%' as const, height: '100%' as const, display: 'block' as const };
 
+    const tEnd = t.timestampMs + t.durationMs;
+    const hasContentAfter = eventsToUse.some(
+      e => e.timestampMs >= tEnd - 50 && (e.type === 'scene' || e.type === 'action')
+    );
+    const hasContentBefore = eventsToUse.some(
+      e => e.timestampMs < t.timestampMs + 50 && (e.type === 'scene' || e.type === 'action')
+    );
+
     // Resolve entrance (new content arriving)
+    // When no slide follows and no scene/action follows, leave empty so backdrop shows.
     let entranceContent: React.ReactNode;
     if (after) {
       entranceContent = <SceneSlide {...resolveSlideProps(after)} />;
-    } else if (frameManifest && frameManifest.length > 0) {
+    } else if (hasContentAfter && frameManifest && frameManifest.length > 0) {
       const afterSourceTime = slideScenes.length > 0
-        ? sourceTimeMs(t.timestampMs + t.durationMs, slideScenes)
-        : t.timestampMs + t.durationMs;
+        ? sourceTimeMs(tEnd, slideScenes) : tEnd;
       const afterEntry = findClosestFrame(frameManifest, afterSourceTime);
       entranceContent = <Img src={staticFile(afterEntry.file)} style={imgStyle} />;
     }
 
     // Resolve exit (old content departing)
+    // When no slide precedes and no scene/action precedes, leave empty so backdrop shows.
     let exitContent: React.ReactNode;
     if (before) {
       exitContent = <SceneSlide {...resolveSlideProps(before)} />;
-    } else if (frameManifest && frameManifest.length > 0) {
+    } else if (hasContentBefore && frameManifest && frameManifest.length > 0) {
       const beforeSourceTime = slideScenes.length > 0
-        ? sourceTimeMs(t.timestampMs, slideScenes)
-        : t.timestampMs;
+        ? sourceTimeMs(t.timestampMs, slideScenes) : t.timestampMs;
       const beforeEntry = findClosestFrame(frameManifest, beforeSourceTime);
       exitContent = <Img src={staticFile(beforeEntry.file)} style={imgStyle} />;
     }
