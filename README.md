@@ -165,11 +165,11 @@ export default async function scenario(sw: ScreenwrightHelpers) {
 | `sw.press(key, { narration? })` | Press a keyboard key |
 | `sw.wait(ms)` | Pause for pacing |
 | `sw.narrate(text)` | Speak narration without an action |
-| `sw.transition({ type, duration })` | Animate between scenes (see Transitions below) |
+| `sw.transition({ type, duration })` | Visual transition between any two states (see Transitions below) |
 
 ### Transitions
 
-Add animated transitions between scenes:
+Add visual transitions anywhere — between slides, after actions, or any time the screen changes:
 
 ```typescript
 await sw.scene('First Scene', { slide: { duration: 1500 } });
