@@ -123,7 +123,10 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
     if (after) {
       entranceContent = <SceneSlide {...resolveSlideProps(after)} />;
     } else if (frameManifest && frameManifest.length > 0) {
-      const afterEntry = findClosestFrame(frameManifest, timeMs);
+      const afterSourceTime = slideScenes.length > 0
+        ? sourceTimeMs(t.timestampMs + t.durationMs, slideScenes)
+        : t.timestampMs + t.durationMs;
+      const afterEntry = findClosestFrame(frameManifest, afterSourceTime);
       entranceContent = <Img src={staticFile(afterEntry.file)} style={imgStyle} />;
     }
 
