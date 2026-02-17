@@ -68,7 +68,7 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
     s => outputTimeMs >= s.slideStartMs && outputTimeMs < s.slideEndMs
   );
 
-  // Check if current time is inside a transition involving at least one slide
+  // Check if current time is inside a transition involving a slide or scenario edge
   let slideTransition: {
     transition: TransitionEvent;
     before: typeof slideSegments[number] | null;
@@ -81,6 +81,14 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
       const before = slideSegments.find(s => Math.abs(s.slideEndMs - t.timestampMs) < 50) ?? null;
       const after = slideSegments.find(s => Math.abs(s.slideStartMs - tEnd) < 50) ?? null;
       if (before || after) { slideTransition = { transition: t, before, after }; break; }
+      // Transitions at scenario edges (no content before/after) fade to/from backdrop
+      const hasAfter = eventsToUse.some(
+        e => e.timestampMs >= tEnd - 50 && (e.type === 'scene' || e.type === 'action')
+      );
+      const hasBefore = eventsToUse.some(
+        e => e.timestampMs < t.timestampMs + 50 && (e.type === 'scene' || e.type === 'action')
+      );
+      if (!hasAfter || !hasBefore) { slideTransition = { transition: t, before, after }; break; }
     }
   }
 
@@ -105,8 +113,22 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
     ? transitionEvents.find(t => outputTimeMs >= t.timestampMs && outputTimeMs < t.timestampMs + t.durationMs)
     : null;
 
+  // Detect if we're past a terminal transition (no content follows → hold backdrop)
+  let pastTerminalTransition = false;
+  if (!activeSlide && !slideTransition && !activeTransition && transitionEvents.length > 0) {
+    const last = transitionEvents[transitionEvents.length - 1];
+    const lastEnd = last.timestampMs + last.durationMs;
+    if (outputTimeMs >= lastEnd) {
+      pastTerminalTransition = !eventsToUse.some(
+        e => e.timestampMs >= lastEnd - 50 && (e.type === 'scene' || e.type === 'action')
+      );
+    }
+  }
+
   let baseLayer: React.ReactNode;
-  if (activeSlide) {
+  if (pastTerminalTransition) {
+    baseLayer = <div style={{ position: 'absolute', inset: 0, backgroundColor: branding?.brandColor ?? '#000000' }} />;
+  } else if (activeSlide) {
     // Slide IS the base layer — no frame images
     baseLayer = <SceneSlide {...resolveSlideProps(activeSlide)} />;
   } else if (slideTransition) {
@@ -174,7 +196,7 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
     }
     const slideSide = after ?? before;
     const backdropColor = styles.backdrop
-      ?? (slideSide ? resolveSlideProps(slideSide).brandColor : '#000000');
+      ?? (slideSide ? resolveSlideProps(slideSide).brandColor : branding?.brandColor ?? '#000000');
     baseLayer = (
       <>
         <div style={{ position: 'absolute', inset: 0, backgroundColor: backdropColor }} />
