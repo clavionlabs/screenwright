@@ -1,4 +1,4 @@
-import type { SceneEvent, SceneSlideConfig, TimelineEvent } from '../timeline/types.js';
+import type { ActionEvent, SceneEvent, SceneSlideConfig, TimelineEvent, TransitionEvent } from '../timeline/types.js';
 
 export const DEFAULT_SLIDE_DURATION_MS = 2000;
 
@@ -9,6 +9,8 @@ export function msToFrames(ms: number, fps: number): number {
 export interface ResolvedSlideScene {
   timestampMs: number;
   slideDurationMs: number;
+  /** Source-time dead zone after the slide (transition wait + optional navigate load). */
+  deadAfterMs: number;
 }
 
 export interface SlideSegment {
@@ -22,14 +24,46 @@ export interface SlideSegment {
 
 /**
  * Filter scenes that have a `slide` field and resolve their duration.
+ * When allEvents is provided, also computes the dead zone after each slide
+ * (stale source time from transition waits + navigate page loads).
  */
-export function resolveSlideScenes(scenes: SceneEvent[]): ResolvedSlideScene[] {
+export function resolveSlideScenes(
+  scenes: SceneEvent[],
+  allEvents?: TimelineEvent[],
+): ResolvedSlideScene[] {
   return scenes
     .filter(s => s.slide !== undefined)
-    .map(s => ({
-      timestampMs: s.timestampMs,
-      slideDurationMs: s.slide!.duration ?? DEFAULT_SLIDE_DURATION_MS,
-    }));
+    .map(s => {
+      let deadAfterMs = 0;
+      if (allEvents) {
+        const afterTrans = allEvents.find(
+          (e): e is TransitionEvent =>
+            e.type === 'transition' && Math.abs(e.timestampMs - s.timestampMs) < 50
+        );
+        if (afterTrans) {
+          const transEnd = s.timestampMs + afterTrans.durationMs;
+          const firstAction = allEvents.find(
+            (e): e is ActionEvent =>
+              e.type === 'action' && e.timestampMs >= transEnd - 50
+          );
+          if (firstAction?.action === 'navigate') {
+            const settled = allEvents.find(
+              e => e.timestampMs > firstAction.timestampMs + 50
+            );
+            deadAfterMs = settled
+              ? settled.timestampMs - s.timestampMs
+              : afterTrans.durationMs;
+          } else {
+            deadAfterMs = afterTrans.durationMs;
+          }
+        }
+      }
+      return {
+        timestampMs: s.timestampMs,
+        slideDurationMs: s.slide!.duration ?? DEFAULT_SLIDE_DURATION_MS,
+        deadAfterMs,
+      };
+    });
 }
 
 /**
@@ -63,6 +97,7 @@ export function computeSlideSegments(scenes: SceneEvent[]): SlideSegment[] {
  * Map an output-time position back to its source-time position.
  * During a slide, returns the scene's timestamp (freeze-frame).
  * During video segments, subtracts accumulated slide durations.
+ * Source times that fall in a dead zone are clamped to its end.
  */
 export function sourceTimeMs(
   outputTimeMs: number,
@@ -75,14 +110,23 @@ export function sourceTimeMs(
     const slideEnd = slideStart + ss.slideDurationMs;
 
     if (outputTimeMs < slideStart) {
-      return outputTimeMs - accumulated;
+      return clampDeadZones(outputTimeMs - accumulated, sorted);
     }
     if (outputTimeMs < slideEnd) {
       return ss.timestampMs;
     }
     accumulated += ss.slideDurationMs;
   }
-  return outputTimeMs - accumulated;
+  return clampDeadZones(outputTimeMs - accumulated, sorted);
+}
+
+function clampDeadZones(sourceTime: number, slides: ResolvedSlideScene[]): number {
+  for (const ss of slides) {
+    if (ss.deadAfterMs > 0 && sourceTime >= ss.timestampMs && sourceTime < ss.timestampMs + ss.deadAfterMs) {
+      return ss.timestampMs + ss.deadAfterMs;
+    }
+  }
+  return sourceTime;
 }
 
 export function totalSlideDurationMs(

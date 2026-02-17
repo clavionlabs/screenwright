@@ -22,7 +22,7 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
   const outputTimeMs = (frame / fps) * 1000;
 
   const scenes = timeline.events.filter((e): e is SceneEvent => e.type === 'scene');
-  const slideScenes = resolveSlideScenes(scenes);
+  const slideScenes = resolveSlideScenes(scenes, timeline.events);
 
   const timeMs = slideScenes.length > 0
     ? sourceTimeMs(outputTimeMs, slideScenes)

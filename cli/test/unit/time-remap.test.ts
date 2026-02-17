@@ -18,8 +18,8 @@ function scene(timestampMs: number, title: string, opts?: { description?: string
   };
 }
 
-function ss(timestampMs: number, slideDurationMs: number = DEFAULT_SLIDE_DURATION_MS): ResolvedSlideScene {
-  return { timestampMs, slideDurationMs };
+function ss(timestampMs: number, slideDurationMs: number = DEFAULT_SLIDE_DURATION_MS, deadAfterMs = 0): ResolvedSlideScene {
+  return { timestampMs, slideDurationMs, deadAfterMs };
 }
 
 function action(timestampMs: number): ActionEvent {
@@ -54,8 +54,8 @@ describe('resolveSlideScenes', () => {
     ];
     const result = resolveSlideScenes(scenes);
     expect(result).toEqual([
-      { timestampMs: 0, slideDurationMs: 2000 },
-      { timestampMs: 10000, slideDurationMs: 3000 },
+      { timestampMs: 0, slideDurationMs: 2000, deadAfterMs: 0 },
+      { timestampMs: 10000, slideDurationMs: 3000, deadAfterMs: 0 },
     ]);
   });
 
@@ -67,6 +67,48 @@ describe('resolveSlideScenes', () => {
   it('uses custom duration from slide config', () => {
     const scenes = [scene(0, 'A', { slide: { duration: 5000 } })];
     expect(resolveSlideScenes(scenes)[0].slideDurationMs).toBe(5000);
+  });
+
+  it('computes deadAfterMs from transition only (no navigate)', () => {
+    const s = scene(1800, 'A', { slide: {} });
+    const trans: TransitionEvent = {
+      type: 'transition', id: 't1', timestampMs: 1800, transition: 'fade', durationMs: 500,
+    };
+    const fill: ActionEvent = {
+      type: 'action', id: 'a1', timestampMs: 2400, action: 'fill',
+      selector: 'input', durationMs: 100, boundingBox: null,
+    };
+    const result = resolveSlideScenes([s], [s, trans, fill]);
+    expect(result[0].deadAfterMs).toBe(500);
+  });
+
+  it('extends deadAfterMs past navigate to settled event', () => {
+    const s = scene(1800, 'A', { slide: {} });
+    const trans: TransitionEvent = {
+      type: 'transition', id: 't1', timestampMs: 1800, transition: 'fade', durationMs: 500,
+    };
+    // Navigate fires at 2300 (transEnd), page loads by 2500
+    const nav: ActionEvent = {
+      type: 'action', id: 'a1', timestampMs: 2300, action: 'navigate',
+      selector: 'http://example.com', durationMs: 0, boundingBox: null,
+    };
+    // First event after navigate = settled
+    const wait: import('../../src/timeline/types.js').WaitEvent = {
+      type: 'wait', id: 'w1', timestampMs: 2500, durationMs: 1000, reason: 'pacing',
+    };
+    const result = resolveSlideScenes([s], [s, trans, nav, wait]);
+    // deadAfterMs = settled.timestampMs - scene.timestampMs = 2500 - 1800 = 700
+    expect(result[0].deadAfterMs).toBe(700);
+  });
+
+  it('deadAfterMs 0 when no transition after slide', () => {
+    const s = scene(0, 'A', { slide: {} });
+    const click: ActionEvent = {
+      type: 'action', id: 'a1', timestampMs: 500, action: 'click',
+      selector: 'button', durationMs: 100, boundingBox: null,
+    };
+    const result = resolveSlideScenes([s], [s, click]);
+    expect(result[0].deadAfterMs).toBe(0);
   });
 });
 
@@ -207,6 +249,51 @@ describe('sourceTimeMs', () => {
   it('exact slide boundary returns source time after slide', () => {
     const slides = [ss(0)];
     expect(sourceTimeMs(2000, slides)).toBe(0);
+  });
+
+  it('clamps source time past dead zone after slide', () => {
+    // Slide at t=1800, duration 2000ms, dead zone 700ms (transition 500ms + navigate 200ms)
+    const slides = [ss(1800, 2000, 700)];
+    // After slide (output 3800+): source = output - 2000
+    // Source 1800 is in dead zone [1800, 2500) → clamp to 2500
+    expect(sourceTimeMs(3800, slides)).toBe(2500);
+    // Source 2000 is in dead zone → clamp to 2500
+    expect(sourceTimeMs(4000, slides)).toBe(2500);
+    // Source 2499 is in dead zone → clamp to 2500
+    expect(sourceTimeMs(4499, slides)).toBe(2500);
+    // Source 2500 is at dead zone end → no clamp
+    expect(sourceTimeMs(4500, slides)).toBe(2500);
+    // Source 2600 is past dead zone → normal
+    expect(sourceTimeMs(4600, slides)).toBe(2600);
+  });
+
+  it('dead zone of 0 has no effect', () => {
+    const slides = [ss(0, 2000, 0)];
+    expect(sourceTimeMs(2000, slides)).toBe(0);
+    expect(sourceTimeMs(3000, slides)).toBe(1000);
+  });
+
+  it('clamps dead zone with multiple slides', () => {
+    // Slide A at t=0, 2000ms duration, 500ms dead zone
+    // Slide B at t=5000, 2000ms duration, 800ms dead zone
+    const slides = [ss(0, 2000, 500), ss(5000, 2000, 800)];
+
+    // After slide A (output 2000+): source in [0, 500) → clamp to 500
+    expect(sourceTimeMs(2000, slides)).toBe(500);
+    expect(sourceTimeMs(2300, slides)).toBe(500);
+    // Source 500 → no clamp
+    expect(sourceTimeMs(2500, slides)).toBe(500);
+    // Source 600 → normal
+    expect(sourceTimeMs(2600, slides)).toBe(600);
+
+    // After slide B (output 9000+): source in [5000, 5800) → clamp to 5800
+    // output 9000 → source = 9000 - 4000 = 5000 → clamp to 5800
+    expect(sourceTimeMs(9000, slides)).toBe(5800);
+    expect(sourceTimeMs(9500, slides)).toBe(5800);
+    // output 9800 → source = 9800 - 4000 = 5800 → at boundary → no clamp
+    expect(sourceTimeMs(9800, slides)).toBe(5800);
+    // output 10000 → source = 10000 - 4000 = 6000 → normal
+    expect(sourceTimeMs(10000, slides)).toBe(6000);
   });
 });
 
