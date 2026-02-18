@@ -66,8 +66,18 @@ export function resolveSlideScenes(
 
 /**
  * Walk timeline events and resolve each transition's frame references.
- * beforeSourceMs = settledAtMs (or timestampMs) of the last visual action before it.
- * afterSourceMs = settledAtMs (or timestampMs) of the first visual action after it.
+ *
+ * Uses **array position** (not timestamps) to find surrounding actions,
+ * because transitions don't consume source time so multiple events can
+ * share a timestamp.
+ *
+ * beforeSourceMs = settledAtMs of the nearest preceding action.
+ * afterSourceMs  = settledAtMs of the nearest following action **only if
+ *   that action is directly adjacent** (no narration / wait / scene between
+ *   them — cursor_target events are transparent).  When intervening content
+ *   events exist the action isn't part of the transition's visual bridge,
+ *   so we fall back to the transition's own timestamp (the page already has
+ *   the right content at that moment).
  */
 export function resolveTransitions(events: TimelineEvent[]): ResolvedTransition[] {
   const result: ResolvedTransition[] = [];
@@ -82,8 +92,10 @@ export function resolveTransitions(events: TimelineEvent[]): ResolvedTransition[
     }
 
     let firstAfter: ActionEvent | null = null;
+    let adjacent = true;
     for (let j = i + 1; j < events.length; j++) {
       if (events[j].type === 'action') { firstAfter = events[j] as ActionEvent; break; }
+      if (events[j].type !== 'cursor_target') adjacent = false;
     }
 
     result.push({
@@ -93,7 +105,7 @@ export function resolveTransitions(events: TimelineEvent[]): ResolvedTransition[
       beforeSourceMs: lastBefore
         ? (lastBefore.settledAtMs ?? lastBefore.timestampMs)
         : event.timestampMs,
-      afterSourceMs: firstAfter
+      afterSourceMs: firstAfter && adjacent
         ? (firstAfter.settledAtMs ?? firstAfter.timestampMs)
         : event.timestampMs,
       hasContentBefore: lastBefore !== null,

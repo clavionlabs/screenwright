@@ -10,7 +10,7 @@ import {
   remapEvents,
 } from '../../src/composition/time-remap.js';
 import type { ResolvedSlideScene, ResolvedTransition } from '../../src/composition/time-remap.js';
-import type { SceneEvent, SceneSlideConfig, ActionEvent, NarrationEvent, TransitionEvent, TimelineEvent } from '../../src/timeline/types.js';
+import type { SceneEvent, SceneSlideConfig, ActionEvent, NarrationEvent, TransitionEvent, WaitEvent, TimelineEvent } from '../../src/timeline/types.js';
 
 function scene(timestampMs: number, title: string, opts?: { description?: string; slide?: SceneSlideConfig }): SceneEvent {
   return {
@@ -194,9 +194,9 @@ describe('resolveTransitions', () => {
     expect(result[0].beforeSourceMs).toBe(600);
   });
 
-  it('uses array position, not timestamp, to find after action', () => {
+  it('uses adjacent action settledAtMs (navigate right after transition)', () => {
     // slide → transition(T0) → navigate(T0) → click(T0+1500)
-    // Navigate shares the transition's timestamp but comes after it in emission order.
+    // Navigate is directly adjacent — use its settledAtMs.
     const events: TimelineEvent[] = [
       scene(0, 'Intro', { slide: {} }),
       transition(0, 500),
@@ -204,8 +204,33 @@ describe('resolveTransitions', () => {
       action(1500, 2000),
     ];
     const result = resolveTransitions(events);
-    // firstAfter should be navigate (position 2), NOT click (position 3)
     expect(result[0].afterSourceMs).toBe(500);
+  });
+
+  it('falls back to transition timestamp when narration intervenes', () => {
+    // slide → transition(T0) → narrate → fill(T0, settled=200)
+    // Narration sits between transition and fill — the fill is NOT part
+    // of the transition's visual bridge.  afterSourceMs should be the
+    // transition's own timestamp so the page shows its pre-fill state.
+    const events: TimelineEvent[] = [
+      scene(0, 'Requesting Access', { slide: {} }),
+      transition(0, 500),
+      narration(0, 'What happens when someone tries to access a workbook?'),
+      action(0, 200),
+    ];
+    const result = resolveTransitions(events);
+    expect(result[0].afterSourceMs).toBe(0);
+  });
+
+  it('falls back to transition timestamp when wait intervenes', () => {
+    const wait: WaitEvent = { type: 'wait', id: 'w-0', timestampMs: 0, durationMs: 1000, reason: 'pacing' };
+    const events: TimelineEvent[] = [
+      transition(0, 500),
+      wait,
+      action(1000, 1500),
+    ];
+    const result = resolveTransitions(events);
+    expect(result[0].afterSourceMs).toBe(0);
   });
 });
 
