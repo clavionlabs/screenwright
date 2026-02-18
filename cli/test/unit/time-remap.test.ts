@@ -190,8 +190,22 @@ describe('resolveTransitions', () => {
       action(700, 800),
     ];
     const result = resolveTransitions(events);
-    // action at 500 is <= transition at 500, so it's the "before" action
+    // action at 500 appears before the transition in array order
     expect(result[0].beforeSourceMs).toBe(600);
+  });
+
+  it('uses array position, not timestamp, to find after action', () => {
+    // slide → transition(T0) → navigate(T0) → click(T0+1500)
+    // Navigate shares the transition's timestamp but comes after it in emission order.
+    const events: TimelineEvent[] = [
+      scene(0, 'Intro', { slide: {} }),
+      transition(0, 500),
+      navigate(0, 500),
+      action(1500, 2000),
+    ];
+    const result = resolveTransitions(events);
+    // firstAfter should be navigate (position 2), NOT click (position 3)
+    expect(result[0].afterSourceMs).toBe(500);
   });
 });
 

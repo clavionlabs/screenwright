@@ -71,14 +71,20 @@ export function resolveSlideScenes(
  */
 export function resolveTransitions(events: TimelineEvent[]): ResolvedTransition[] {
   const result: ResolvedTransition[] = [];
-  const actions = events.filter((e): e is ActionEvent => e.type === 'action');
 
   for (let i = 0; i < events.length; i++) {
     const event = events[i];
     if (event.type !== 'transition') continue;
 
-    const lastBefore = findLastAction(actions, event.timestampMs);
-    const firstAfter = actions.find(a => a.timestampMs > event.timestampMs) ?? null;
+    let lastBefore: ActionEvent | null = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (events[j].type === 'action') { lastBefore = events[j] as ActionEvent; break; }
+    }
+
+    let firstAfter: ActionEvent | null = null;
+    for (let j = i + 1; j < events.length; j++) {
+      if (events[j].type === 'action') { firstAfter = events[j] as ActionEvent; break; }
+    }
 
     result.push({
       timestampMs: event.timestampMs,
@@ -97,15 +103,6 @@ export function resolveTransitions(events: TimelineEvent[]): ResolvedTransition[
   }
 
   return result;
-}
-
-function findLastAction(actions: ActionEvent[], beforeOrAt: number): ActionEvent | null {
-  let last: ActionEvent | null = null;
-  for (const a of actions) {
-    if (a.timestampMs <= beforeOrAt) last = a;
-    else break;
-  }
-  return last;
 }
 
 /* ------------------------------------------------------------------ */
