@@ -49,8 +49,9 @@ function rt(
   eventIndex = 0,
   beforeSnapshot: string | null = null,
   afterSnapshot: string | null = null,
+  afterSourceMs?: number,
 ): ResolvedTransition {
-  return { timestampMs, transitionDurationMs: durationMs, transition: type, beforeSnapshot, afterSnapshot, hasContentBefore, hasContentAfter, eventIndex };
+  return { timestampMs, transitionDurationMs: durationMs, transition: type, beforeSnapshot, afterSnapshot, afterSourceMs: afterSourceMs ?? timestampMs, hasContentBefore, hasContentAfter, eventIndex };
 }
 
 describe('DEFAULT_SLIDE_DURATION_MS', () => {
@@ -115,7 +116,7 @@ describe('resolveTransitions', () => {
     ];
     const result = resolveTransitions(events);
     expect(result).toEqual([
-      { timestampMs: 500, transitionDurationMs: 300, transition: 'fade', beforeSnapshot: null, afterSnapshot: null, hasContentBefore: true, hasContentAfter: true, eventIndex: 1 },
+      { timestampMs: 500, transitionDurationMs: 300, transition: 'fade', beforeSnapshot: null, afterSnapshot: null, afterSourceMs: 800, hasContentBefore: true, hasContentAfter: true, eventIndex: 1 },
     ]);
   });
 
@@ -497,6 +498,19 @@ describe('sourceTimeMs', () => {
     // After both (total inserted = 2500): output 2500 -> source 0
     expect(sourceTimeMs(2500, slides, trans)).toBe(0);
     expect(sourceTimeMs(3500, slides, trans)).toBe(1000);
+  });
+
+  it('transition with afterSourceMs skips past settling period', () => {
+    const slides = [ss(0, 2000)];
+    // Transition at source 0, afterSourceMs=500 (navigate settles at 500ms)
+    const trans = [rt(0, 500, 'fade', true, true, 0, null, null, 500)];
+    // During slide (0-2000): freeze at 0
+    expect(sourceTimeMs(1000, slides, trans)).toBe(0);
+    // During transition (2000-2500): freeze at 0
+    expect(sourceTimeMs(2250, slides, trans)).toBe(0);
+    // After transition: source time should be 500 (past settling), not 0
+    expect(sourceTimeMs(2500, slides, trans)).toBe(500);
+    expect(sourceTimeMs(3000, slides, trans)).toBe(1000);
   });
 
   it('mixed slides and transitions at different times', () => {

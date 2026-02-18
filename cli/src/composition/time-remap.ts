@@ -21,6 +21,10 @@ export interface ResolvedTransition {
   beforeSnapshot: string | null;
   /** Snapshot file path for entrance content (after transition). */
   afterSnapshot: string | null;
+  /** Source time where the frame manifest has valid post-transition content.
+   *  When an adjacent action follows, this is its settledAtMs (skipping
+   *  garbage frames captured during page.goto / click settling). */
+  afterSourceMs: number;
   /** True when a visual action exists before this transition. */
   hasContentBefore: boolean;
   /** True when a visual action exists after this transition. */
@@ -106,6 +110,9 @@ export function resolveTransitions(events: TimelineEvent[]): ResolvedTransition[
       afterSnapshot: firstAfter && adjacent
         ? (firstAfter.settledSnapshot ?? null)
         : (te.pageSnapshot ?? null),
+      afterSourceMs: firstAfter && adjacent && firstAfter.settledAtMs !== undefined
+        ? firstAfter.settledAtMs
+        : event.timestampMs,
       hasContentBefore: lastBefore !== null,
       hasContentAfter: firstAfter !== null,
       eventIndex: i,
@@ -124,6 +131,9 @@ interface Insertion {
   durationMs: number;
   kind: 'slide' | 'transition';
   eventIndex: number;
+  /** For transitions: source time to resume after the insertion
+   *  (skips garbage frames captured during action settling). */
+  afterSourceMs?: number;
 }
 
 function buildSortedInsertions(
@@ -135,7 +145,7 @@ function buildSortedInsertions(
     ins.push({ sourceTimeMs: ss.timestampMs, durationMs: ss.slideDurationMs, kind: 'slide', eventIndex: ss.eventIndex });
   }
   for (const t of transitions) {
-    ins.push({ sourceTimeMs: t.timestampMs, durationMs: t.transitionDurationMs, kind: 'transition', eventIndex: t.eventIndex });
+    ins.push({ sourceTimeMs: t.timestampMs, durationMs: t.transitionDurationMs, kind: 'transition', eventIndex: t.eventIndex, afterSourceMs: t.afterSourceMs });
   }
   ins.sort((a, b) => a.sourceTimeMs - b.sourceTimeMs || a.eventIndex - b.eventIndex);
   return ins;
@@ -159,6 +169,9 @@ export function sourceTimeMs(
     if (outputTimeMs < start) return outputTimeMs - accumulated;
     if (outputTimeMs < end) return ins.sourceTimeMs;
     accumulated += ins.durationMs;
+    // Transition insertions skip source time past the next action's settling period.
+    const skip = (ins.afterSourceMs ?? ins.sourceTimeMs) - ins.sourceTimeMs;
+    if (skip > 0) accumulated -= skip;
   }
   return outputTimeMs - accumulated;
 }
@@ -171,7 +184,12 @@ export function totalSlideDurationMs(slideScenes: ResolvedSlideScene[]): number 
 
 export function totalTransitionDurationMs(transitions: ResolvedTransition[]): number {
   let total = 0;
-  for (const t of transitions) total += t.transitionDurationMs;
+  for (const t of transitions) {
+    total += t.transitionDurationMs;
+    // Subtract source time consumed by settling skip
+    const skip = t.afterSourceMs - t.timestampMs;
+    if (skip > 0) total -= skip;
+  }
   return total;
 }
 
@@ -241,6 +259,8 @@ export function computeOutputSegments(
     }
 
     accumulated += ins.durationMs;
+    const skip = (ins.afterSourceMs ?? ins.sourceTimeMs) - ins.sourceTimeMs;
+    if (skip > 0) accumulated -= skip;
   }
 
   // Second pass: link transitions to adjacent slides when they share
@@ -277,6 +297,8 @@ export function remapEvents<T extends TimelineEvent>(
     for (const ins of insertions) {
       if (event.timestampMs >= ins.sourceTimeMs) {
         offset += ins.durationMs;
+        const skip = (ins.afterSourceMs ?? ins.sourceTimeMs) - ins.sourceTimeMs;
+        if (skip > 0) offset -= skip;
       } else {
         break;
       }
