@@ -447,4 +447,111 @@ describe('createHelpers', () => {
 
     await expect(sw.transition({ duration: NaN })).rejects.toThrow('positive number');
   });
+
+  describe('captureSnapshot callback', () => {
+    it('click() stores settledSnapshot when callback provided', async () => {
+      const page = mockPage();
+      const collector = new TimelineCollector();
+      collector.start();
+      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000001.jpg');
+      const sw = createHelpers(page, collector, { captureSnapshot });
+
+      await sw.click('.btn');
+      expect(captureSnapshot).toHaveBeenCalledOnce();
+      const actionEvent = collector.getEvents().find(e => e.type === 'action') as any;
+      expect(actionEvent.settledSnapshot).toBe('snapshots/snapshot-000001.jpg');
+    });
+
+    it('navigate() stores settledSnapshot when callback provided', async () => {
+      const page = mockPage();
+      const collector = new TimelineCollector();
+      collector.start();
+      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000001.jpg');
+      const sw = createHelpers(page, collector, { captureSnapshot });
+
+      await sw.navigate('http://localhost:3000');
+      expect(captureSnapshot).toHaveBeenCalledOnce();
+      const ev = collector.getEvents()[0] as any;
+      expect(ev.settledSnapshot).toBe('snapshots/snapshot-000001.jpg');
+    });
+
+    it('fill() stores settledSnapshot when callback provided', async () => {
+      const page = mockPage();
+      const collector = new TimelineCollector();
+      collector.start();
+      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000001.jpg');
+      const sw = createHelpers(page, collector, { captureSnapshot });
+
+      await sw.fill('.input', 'abc');
+      expect(captureSnapshot).toHaveBeenCalledOnce();
+      const actionEvent = collector.getEvents().find(e => e.type === 'action') as any;
+      expect(actionEvent.settledSnapshot).toBe('snapshots/snapshot-000001.jpg');
+    });
+
+    it('hover() stores settledSnapshot when callback provided', async () => {
+      const page = mockPage();
+      const collector = new TimelineCollector();
+      collector.start();
+      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000001.jpg');
+      const sw = createHelpers(page, collector, { captureSnapshot });
+
+      await sw.hover('.btn');
+      expect(captureSnapshot).toHaveBeenCalledOnce();
+      const actionEvent = collector.getEvents().find(e => e.type === 'action') as any;
+      expect(actionEvent.settledSnapshot).toBe('snapshots/snapshot-000001.jpg');
+    });
+
+    it('press() stores settledSnapshot when callback provided', async () => {
+      const page = mockPage();
+      const collector = new TimelineCollector();
+      collector.start();
+      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000001.jpg');
+      const sw = createHelpers(page, collector, { captureSnapshot });
+
+      await sw.press('Enter');
+      expect(captureSnapshot).toHaveBeenCalledOnce();
+      const ev = collector.getEvents()[0] as any;
+      expect(ev.settledSnapshot).toBe('snapshots/snapshot-000001.jpg');
+    });
+
+    it('transition() stores pageSnapshot when callback provided', async () => {
+      const page = mockPage();
+      const collector = new TimelineCollector();
+      collector.start();
+      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000002.jpg');
+      const sw = createHelpers(page, collector, { captureSnapshot });
+
+      await sw.transition();
+      expect(captureSnapshot).toHaveBeenCalledOnce();
+      const ev = collector.getEvents()[0] as any;
+      expect(ev.pageSnapshot).toBe('snapshots/snapshot-000002.jpg');
+    });
+
+    it('omits snapshot fields when no callback provided', async () => {
+      const page = mockPage();
+      const collector = new TimelineCollector();
+      collector.start();
+      const sw = createHelpers(page, collector);
+
+      await sw.click('.btn');
+      await sw.transition();
+      const events = collector.getEvents();
+      const actionEvent = events.find(e => e.type === 'action') as any;
+      const transitionEvent = events.find(e => e.type === 'transition') as any;
+      expect(actionEvent.settledSnapshot).toBeUndefined();
+      expect(transitionEvent.pageSnapshot).toBeUndefined();
+    });
+
+    it('swallows snapshot errors silently', async () => {
+      const page = mockPage();
+      const collector = new TimelineCollector();
+      collector.start();
+      const captureSnapshot = vi.fn().mockRejectedValue(new Error('screenshot failed'));
+      const sw = createHelpers(page, collector, { captureSnapshot });
+
+      await sw.click('.btn');
+      const actionEvent = collector.getEvents().find(e => e.type === 'action') as any;
+      expect(actionEvent.settledSnapshot).toBeUndefined();
+    });
+  });
 });

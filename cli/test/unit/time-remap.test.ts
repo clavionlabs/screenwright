@@ -10,7 +10,7 @@ import {
   remapEvents,
 } from '../../src/composition/time-remap.js';
 import type { ResolvedSlideScene, ResolvedTransition } from '../../src/composition/time-remap.js';
-import type { SceneEvent, SceneSlideConfig, ActionEvent, NarrationEvent, TransitionEvent, WaitEvent, TimelineEvent } from '../../src/timeline/types.js';
+import type { SceneEvent, SceneSlideConfig, ActionEvent, NarrationEvent, TransitionEvent, TimelineEvent } from '../../src/timeline/types.js';
 
 function scene(timestampMs: number, title: string, opts?: { description?: string; slide?: SceneSlideConfig }): SceneEvent {
   return {
@@ -24,26 +24,18 @@ function ss(timestampMs: number, slideDurationMs: number = DEFAULT_SLIDE_DURATIO
   return { timestampMs, slideDurationMs, eventIndex };
 }
 
-function action(timestampMs: number, settledAtMs?: number): ActionEvent {
+function action(timestampMs: number, settledAtMs?: number, settledSnapshot?: string): ActionEvent {
   return {
     type: 'action', id: `a-${timestampMs}`, timestampMs,
     action: 'click', selector: 'button', durationMs: 100,
     boundingBox: { x: 0, y: 0, width: 10, height: 10 },
     ...(settledAtMs !== undefined ? { settledAtMs } : {}),
+    ...(settledSnapshot ? { settledSnapshot } : {}),
   };
 }
 
-function navigate(timestampMs: number, settledAtMs?: number): ActionEvent {
-  return {
-    type: 'action', id: `a-nav-${timestampMs}`, timestampMs,
-    action: 'navigate', selector: 'http://example.com', durationMs: 0,
-    boundingBox: null,
-    ...(settledAtMs !== undefined ? { settledAtMs } : {}),
-  };
-}
-
-function transition(timestampMs: number, durationMs = 500, type: TransitionEvent['transition'] = 'fade'): TransitionEvent {
-  return { type: 'transition', id: `t-${timestampMs}`, timestampMs, transition: type, durationMs };
+function transition(timestampMs: number, durationMs = 500, type: TransitionEvent['transition'] = 'fade', pageSnapshot?: string): TransitionEvent {
+  return { type: 'transition', id: `t-${timestampMs}`, timestampMs, transition: type, durationMs, ...(pageSnapshot ? { pageSnapshot } : {}) };
 }
 
 function narration(timestampMs: number, text: string): NarrationEvent {
@@ -51,12 +43,14 @@ function narration(timestampMs: number, text: string): NarrationEvent {
 }
 
 function rt(
-  timestampMs: number, durationMs: number, beforeSourceMs: number, afterSourceMs: number,
+  timestampMs: number, durationMs: number,
   type: TransitionEvent['transition'] = 'fade',
   hasContentBefore = true, hasContentAfter = true,
   eventIndex = 0,
+  beforeSnapshot: string | null = null,
+  afterSnapshot: string | null = null,
 ): ResolvedTransition {
-  return { timestampMs, transitionDurationMs: durationMs, transition: type, beforeSourceMs, afterSourceMs, hasContentBefore, hasContentAfter, eventIndex };
+  return { timestampMs, transitionDurationMs: durationMs, transition: type, beforeSnapshot, afterSnapshot, hasContentBefore, hasContentAfter, eventIndex };
 }
 
 describe('DEFAULT_SLIDE_DURATION_MS', () => {
@@ -121,41 +115,26 @@ describe('resolveTransitions', () => {
     ];
     const result = resolveTransitions(events);
     expect(result).toEqual([
-      { timestampMs: 500, transitionDurationMs: 300, transition: 'fade', beforeSourceMs: 100, afterSourceMs: 800, hasContentBefore: true, hasContentAfter: true, eventIndex: 1 },
+      { timestampMs: 500, transitionDurationMs: 300, transition: 'fade', beforeSnapshot: null, afterSnapshot: null, hasContentBefore: true, hasContentAfter: true, eventIndex: 1 },
     ]);
   });
 
-  it('falls back to timestampMs when settledAtMs missing', () => {
-    const events: TimelineEvent[] = [
-      action(0),
-      transition(500, 300),
-      action(600),
-    ];
-    const result = resolveTransitions(events);
-    expect(result[0].beforeSourceMs).toBe(0);
-    expect(result[0].afterSourceMs).toBe(600);
-  });
-
-  it('uses transition timestampMs when no before action', () => {
+  it('marks no content before when transition is first', () => {
     const events: TimelineEvent[] = [
       transition(0, 500),
       action(600, 800),
     ];
     const result = resolveTransitions(events);
-    expect(result[0].beforeSourceMs).toBe(0);
-    expect(result[0].afterSourceMs).toBe(800);
     expect(result[0].hasContentBefore).toBe(false);
     expect(result[0].hasContentAfter).toBe(true);
   });
 
-  it('uses transition timestampMs when no after action', () => {
+  it('marks no content after when transition is last', () => {
     const events: TimelineEvent[] = [
       action(0, 100),
       transition(500, 300),
     ];
     const result = resolveTransitions(events);
-    expect(result[0].beforeSourceMs).toBe(100);
-    expect(result[0].afterSourceMs).toBe(500);
     expect(result[0].hasContentBefore).toBe(true);
     expect(result[0].hasContentAfter).toBe(false);
   });
@@ -179,58 +158,62 @@ describe('resolveTransitions', () => {
     ];
     const result = resolveTransitions(events);
     expect(result).toHaveLength(2);
-    expect(result[0]).toMatchObject({ timestampMs: 100, beforeSourceMs: 50, afterSourceMs: 250 });
-    expect(result[1]).toMatchObject({ timestampMs: 300, beforeSourceMs: 250, afterSourceMs: 450 });
+    expect(result[0]).toMatchObject({ timestampMs: 100, hasContentBefore: true, hasContentAfter: true });
+    expect(result[1]).toMatchObject({ timestampMs: 300, hasContentBefore: true, hasContentAfter: true });
   });
 
-  it('handles action at same timestamp as transition (before)', () => {
+  it('populates beforeSnapshot from preceding action settledSnapshot', () => {
     const events: TimelineEvent[] = [
-      action(500, 600),
+      action(0, 100, 'snapshots/snapshot-000001.jpg'),
       transition(500, 300),
-      action(700, 800),
+      action(600, 800),
     ];
     const result = resolveTransitions(events);
-    // action at 500 appears before the transition in array order
-    expect(result[0].beforeSourceMs).toBe(600);
+    expect(result[0].beforeSnapshot).toBe('snapshots/snapshot-000001.jpg');
   });
 
-  it('uses adjacent action settledAtMs (navigate right after transition)', () => {
-    // slide → transition(T0) → navigate(T0) → click(T0+1500)
-    // Navigate is directly adjacent — use its settledAtMs.
+  it('populates afterSnapshot from adjacent action settledSnapshot', () => {
     const events: TimelineEvent[] = [
-      scene(0, 'Intro', { slide: {} }),
-      transition(0, 500),
-      navigate(0, 500),
-      action(1500, 2000),
+      action(0, 100),
+      transition(500, 300),
+      action(600, 800, 'snapshots/snapshot-000002.jpg'),
     ];
     const result = resolveTransitions(events);
-    expect(result[0].afterSourceMs).toBe(500);
+    expect(result[0].afterSnapshot).toBe('snapshots/snapshot-000002.jpg');
   });
 
-  it('falls back to transition timestamp when narration intervenes', () => {
-    // slide → transition(T0) → narrate → fill(T0, settled=200)
-    // Narration sits between transition and fill — the fill is NOT part
-    // of the transition's visual bridge.  afterSourceMs should be the
-    // transition's own timestamp so the page shows its pre-fill state.
+  it('falls back to pageSnapshot for beforeSnapshot when no action snapshot', () => {
     const events: TimelineEvent[] = [
-      scene(0, 'Requesting Access', { slide: {} }),
-      transition(0, 500),
-      narration(0, 'What happens when someone tries to access a workbook?'),
-      action(0, 200),
+      action(0, 100),
+      transition(500, 300, 'fade', 'snapshots/snapshot-000003.jpg'),
+      action(600, 800),
     ];
     const result = resolveTransitions(events);
-    expect(result[0].afterSourceMs).toBe(0);
+    // action has no settledSnapshot, so falls back to transition's pageSnapshot
+    expect(result[0].beforeSnapshot).toBe('snapshots/snapshot-000003.jpg');
   });
 
-  it('falls back to transition timestamp when wait intervenes', () => {
-    const wait: WaitEvent = { type: 'wait', id: 'w-0', timestampMs: 0, durationMs: 1000, reason: 'pacing' };
+  it('uses pageSnapshot for afterSnapshot when non-adjacent', () => {
     const events: TimelineEvent[] = [
-      transition(0, 500),
-      wait,
-      action(1000, 1500),
+      action(0, 100),
+      transition(500, 300, 'fade', 'snapshots/snapshot-000003.jpg'),
+      narration(500, 'some text'),
+      action(600, 800, 'snapshots/snapshot-000004.jpg'),
     ];
     const result = resolveTransitions(events);
-    expect(result[0].afterSourceMs).toBe(0);
+    // Narration intervenes → non-adjacent → use pageSnapshot
+    expect(result[0].afterSnapshot).toBe('snapshots/snapshot-000003.jpg');
+  });
+
+  it('returns null snapshots when events lack them', () => {
+    const events: TimelineEvent[] = [
+      action(0, 100),
+      transition(500, 300),
+      action(600, 800),
+    ];
+    const result = resolveTransitions(events);
+    expect(result[0].beforeSnapshot).toBeNull();
+    expect(result[0].afterSnapshot).toBeNull();
   });
 });
 
@@ -251,8 +234,8 @@ describe('totalSlideDurationMs', () => {
 describe('totalTransitionDurationMs', () => {
   it('sums transition durations', () => {
     expect(totalTransitionDurationMs([
-      rt(0, 500, 0, 0),
-      rt(1000, 300, 0, 0),
+      rt(0, 500),
+      rt(1000, 300),
     ])).toBe(800);
   });
 
@@ -309,7 +292,7 @@ describe('computeOutputSegments', () => {
 
   it('computes slide + transition with correct offsets', () => {
     const scenes = [scene(0, 'Intro', { slide: {} })];
-    const trans = [rt(0, 500, 0, 100)];
+    const trans = [rt(0, 500)];
     const result = computeOutputSegments(scenes, trans);
     // Slide first (same source time, slides sort before transitions)
     expect(result.slides[0]).toMatchObject({ slideStartMs: 0, slideEndMs: 2000 });
@@ -322,7 +305,7 @@ describe('computeOutputSegments', () => {
       scene(0, 'Intro', { slide: {} }),
       scene(5000, 'Feature', { slide: {} }),
     ];
-    const trans = [rt(5000, 500, 100, 5100)];
+    const trans = [rt(5000, 500)];
     const result = computeOutputSegments(scenes, trans);
 
     // Slide A: source 0, output 0-2000
@@ -336,21 +319,79 @@ describe('computeOutputSegments', () => {
 
   it('transition between two source-time positions', () => {
     const scenes: SceneEvent[] = [];
-    const trans = [rt(3000, 500, 2900, 3100)];
+    const trans = [rt(3000, 500)];
     const result = computeOutputSegments(scenes, trans);
     expect(result.transitions[0]).toMatchObject({ outputStartMs: 3000, outputEndMs: 3500 });
   });
 
   it('propagates hasContentBefore/After flags to segments', () => {
     const trans = [
-      rt(0, 500, 0, 100, 'fade', false, true),   // start edge
-      rt(5000, 500, 4900, 5000, 'fade', true, false),  // end edge
+      rt(0, 500, 'fade', false, true),   // start edge
+      rt(5000, 500, 'fade', true, false),  // end edge
     ];
     const result = computeOutputSegments([], trans);
     expect(result.transitions[0].hasContentBefore).toBe(false);
     expect(result.transitions[0].hasContentAfter).toBe(true);
     expect(result.transitions[1].hasContentBefore).toBe(true);
     expect(result.transitions[1].hasContentAfter).toBe(false);
+  });
+
+  it('propagates snapshot fields to segments', () => {
+    const trans = [
+      rt(3000, 500, 'fade', true, true, 0, 'snapshots/snapshot-000001.jpg', 'snapshots/snapshot-000002.jpg'),
+    ];
+    const result = computeOutputSegments([], trans);
+    expect(result.transitions[0].beforeSnapshot).toBe('snapshots/snapshot-000001.jpg');
+    expect(result.transitions[0].afterSnapshot).toBe('snapshots/snapshot-000002.jpg');
+  });
+
+  it('propagates null snapshots to segments', () => {
+    const trans = [rt(3000, 500)];
+    const result = computeOutputSegments([], trans);
+    expect(result.transitions[0].beforeSnapshot).toBeNull();
+    expect(result.transitions[0].afterSnapshot).toBeNull();
+  });
+
+  it('sets adjacentSlideBefore when slide precedes transition', () => {
+    const scenes = [scene(0, 'Intro', { slide: {} })];
+    const trans = [rt(0, 500)];
+    const allEvents: TimelineEvent[] = [scenes[0], transition(0, 500)];
+    const result = computeOutputSegments(scenes, trans, allEvents);
+    expect(result.transitions[0].adjacentSlideBefore).toBe(0);
+    expect(result.transitions[0].adjacentSlideAfter).toBeNull();
+  });
+
+  it('sets adjacentSlideAfter when slide follows transition', () => {
+    const scenes = [scene(0, 'Intro', { slide: {} })];
+    const trans = [rt(0, 500, 'fade', false, true, 0)];
+    // transition first, then slide — eventIndex makes transition sort first at same timestamp
+    // Actually we need the transition to come before the slide in insertion order.
+    // With eventIndex 0 for transition and eventIndex 1 for slide at same timestamp:
+    const allEvents: TimelineEvent[] = [
+      { type: 'transition', id: 't-0', timestampMs: 0, transition: 'fade', durationMs: 500 } as TransitionEvent,
+      scenes[0],
+    ];
+    const transResolved = resolveTransitions(allEvents);
+    const result = computeOutputSegments(scenes, transResolved, allEvents);
+    expect(result.transitions[0].adjacentSlideBefore).toBeNull();
+    expect(result.transitions[0].adjacentSlideAfter).toBe(0);
+  });
+
+  it('sets both adjacentSlide fields for slide-transition-slide', () => {
+    const s1 = scene(0, 'A', { slide: {} });
+    const t1: TransitionEvent = { type: 'transition', id: 't-0', timestampMs: 0, transition: 'fade', durationMs: 500 };
+    const s2 = scene(0, 'B', { slide: {} });
+    const allEvents: TimelineEvent[] = [s1, t1, s2];
+    const result = computeOutputSegments([s1, s2], resolveTransitions(allEvents), allEvents);
+    expect(result.transitions[0].adjacentSlideBefore).toBe(0);
+    expect(result.transitions[0].adjacentSlideAfter).toBe(1);
+  });
+
+  it('null adjacentSlide fields when transition is between actions', () => {
+    const trans = [rt(3000, 500)];
+    const result = computeOutputSegments([], trans);
+    expect(result.transitions[0].adjacentSlideBefore).toBeNull();
+    expect(result.transitions[0].adjacentSlideAfter).toBeNull();
   });
 });
 
@@ -418,7 +459,7 @@ describe('sourceTimeMs', () => {
   });
 
   it('single transition inserts output time', () => {
-    const trans = [rt(3000, 500, 2900, 3100)];
+    const trans = [rt(3000, 500)];
     // Before transition: identity
     expect(sourceTimeMs(2000, [], trans)).toBe(2000);
     // During transition (3000-3500): freeze at 3000
@@ -432,7 +473,7 @@ describe('sourceTimeMs', () => {
 
   it('slide + transition at same source time', () => {
     const slides = [ss(0, 2000)];
-    const trans = [rt(0, 500, 0, 100)];
+    const trans = [rt(0, 500)];
     // Slide at source 0: output 0-2000, freeze at 0
     expect(sourceTimeMs(1000, slides, trans)).toBe(0);
     // Transition at source 0: output 2000-2500, freeze at 0
@@ -445,7 +486,7 @@ describe('sourceTimeMs', () => {
 
   it('mixed slides and transitions at different times', () => {
     const slides = [ss(0, 2000)];
-    const trans = [rt(5000, 500, 4900, 5100)];
+    const trans = [rt(5000, 500)];
     // During slide (0-2000): freeze at 0
     expect(sourceTimeMs(1000, slides, trans)).toBe(0);
     // After slide, before transition: output 2000-7000 -> source 0-5000
@@ -506,7 +547,7 @@ describe('remapEvents', () => {
 
   it('remaps with both slides and transitions', () => {
     const slides = [ss(0, 2000)];
-    const trans = [rt(5000, 500, 4900, 5100)];
+    const trans = [rt(5000, 500)];
     const events = [
       action(500),    // after slide 0 (2000ms) -> +2000 = 2500
       action(5000),   // after slide 0 + transition (2500ms) -> +2500 = 7500

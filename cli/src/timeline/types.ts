@@ -63,6 +63,8 @@ export interface ActionEvent {
   durationMs: number;
   boundingBox: { x: number; y: number; width: number; height: number } | null;
   settledAtMs?: number;
+  /** Path to a snapshot captured after the action settled. */
+  settledSnapshot?: string;
 }
 
 export interface CursorTargetEvent {
@@ -100,4 +102,6 @@ export interface TransitionEvent {
   timestampMs: number;
   transition: TransitionType;
   durationMs: number;
+  /** Path to a snapshot of the page at transition time. */
+  pageSnapshot?: string;
 }

@@ -18,7 +18,6 @@ import {
 } from './time-remap.js';
 
 const IMG_STYLE = { width: '100%' as const, height: '100%' as const, display: 'block' as const };
-const JITTER_MS = 50;
 
 interface Props {
   timeline: ValidatedTimeline;
@@ -72,25 +71,9 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
     };
   }
 
-  // Check if current time is inside a slide
-  let activeSlide = slideSegments.find(
+  const activeSlide = slideSegments.find(
     s => outputTimeMs >= s.slideStartMs && outputTimeMs < s.slideEndMs
   );
-
-  // Fallback: snap to nearest slide within 100ms jitter
-  if (!activeSlide && slideSegments.length > 0) {
-    let best = slideSegments[0];
-    let bestDist = Infinity;
-    for (const s of slideSegments) {
-      const dist = outputTimeMs < s.slideStartMs
-        ? s.slideStartMs - outputTimeMs
-        : outputTimeMs >= s.slideEndMs
-          ? outputTimeMs - s.slideEndMs
-          : 0;
-      if (dist < bestDist) { bestDist = dist; best = s; }
-    }
-    if (bestDist < 100) activeSlide = best;
-  }
 
   // Check if current time is inside a transition segment
   const activeTransition = !activeSlide
@@ -107,31 +90,23 @@ export const DemoVideo: React.FC<Props> = ({ timeline, branding }) => {
     const faceClip = styles.container ? {} : { overflow: 'hidden' as const };
 
     // Resolve exit content (before the transition)
-    const beforeSlide = slideSegments.find(
-      s => Math.abs(s.slideEndMs - activeTransition.outputStartMs) < JITTER_MS
-    );
+    const beforeSlide = activeTransition.adjacentSlideBefore !== null
+      ? slideSegments[activeTransition.adjacentSlideBefore] : null;
     let exitContent: React.ReactNode;
-    if (!activeTransition.hasContentBefore && !beforeSlide) {
-      exitContent = undefined; // scenario start edge — backdrop
-    } else if (beforeSlide) {
+    if (beforeSlide) {
       exitContent = <SceneSlide {...resolveSlideProps(beforeSlide)} />;
-    } else {
-      const beforeEntry = findClosestFrame(frameManifest, activeTransition.beforeSourceMs);
-      exitContent = <Img src={staticFile(beforeEntry.file)} style={IMG_STYLE} />;
+    } else if (activeTransition.beforeSnapshot) {
+      exitContent = <Img src={staticFile(activeTransition.beforeSnapshot)} style={IMG_STYLE} />;
     }
 
     // Resolve entrance content (after the transition)
-    const afterSlide = slideSegments.find(
-      s => Math.abs(s.slideStartMs - activeTransition.outputEndMs) < JITTER_MS
-    );
+    const afterSlide = activeTransition.adjacentSlideAfter !== null
+      ? slideSegments[activeTransition.adjacentSlideAfter] : null;
     let entranceContent: React.ReactNode;
-    if (!activeTransition.hasContentAfter && !afterSlide) {
-      entranceContent = undefined; // scenario end edge — backdrop
-    } else if (afterSlide) {
+    if (afterSlide) {
       entranceContent = <SceneSlide {...resolveSlideProps(afterSlide)} />;
-    } else {
-      const afterEntry = findClosestFrame(frameManifest, activeTransition.afterSourceMs);
-      entranceContent = <Img src={staticFile(afterEntry.file)} style={IMG_STYLE} />;
+    } else if (activeTransition.afterSnapshot) {
+      entranceContent = <Img src={staticFile(activeTransition.afterSnapshot)} style={IMG_STYLE} />;
     }
 
     const faces = (

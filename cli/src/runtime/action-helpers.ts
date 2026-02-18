@@ -44,9 +44,25 @@ export function calculateMoveDuration(fromX: number, fromY: number, toX: number,
   return Math.min(CURSOR_MOVE_MAX_MS, Math.max(CURSOR_MOVE_MIN_MS, Math.round(200 * Math.log2(distance / 10 + 1))));
 }
 
-export function createHelpers(page: Page, collector: TimelineCollector): ScreenwrightHelpers {
+export interface CreateHelpersOptions {
+  captureSnapshot?: () => Promise<string>;
+}
+
+export function createHelpers(page: Page, collector: TimelineCollector, opts?: CreateHelpersOptions): ScreenwrightHelpers {
   let lastX = 640;
   let lastY = 360;
+
+  async function takeSnapshot(): Promise<string | undefined> {
+    if (!opts?.captureSnapshot) return undefined;
+    const before = performance.now();
+    try {
+      return await opts.captureSnapshot();
+    } catch {
+      return undefined;
+    } finally {
+      collector.excludeTime(performance.now() - before);
+    }
+  }
 
   async function emitNarration(text: string): Promise<void> {
     const estimatedMs = estimateNarrationMs(text);
@@ -103,6 +119,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
       const startMs = collector.elapsed();
       try {
         await page.goto(url, { waitUntil: 'domcontentloaded' });
+        const settledSnapshot = await takeSnapshot();
         collector.emit({
           type: 'action',
           action: 'navigate',
@@ -111,6 +128,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
           boundingBox: null,
           timestampMs: startMs,
           settledAtMs: collector.elapsed(),
+          ...(settledSnapshot ? { settledSnapshot } : {}),
         });
       } catch (err) {
         throw actionError('navigate', url, err);
@@ -127,6 +145,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
         const box = await locator.boundingBox();
         const startMs = collector.elapsed();
         await locator.click();
+        const settledSnapshot = await takeSnapshot();
         collector.emit({
           type: 'action',
           action: 'click',
@@ -135,6 +154,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
           boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
           timestampMs: startMs,
           settledAtMs: collector.elapsed(),
+          ...(settledSnapshot ? { settledSnapshot } : {}),
         });
       } catch (err) {
         throw actionError('click', selector, err);
@@ -153,6 +173,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
         for (const char of value) {
           await page.keyboard.type(char, { delay: CHAR_TYPE_DELAY_MS });
         }
+        const settledSnapshot = await takeSnapshot();
         collector.emit({
           type: 'action',
           action: 'fill',
@@ -162,6 +183,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
           boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
           timestampMs: startMs,
           settledAtMs: collector.elapsed(),
+          ...(settledSnapshot ? { settledSnapshot } : {}),
         });
       } catch (err) {
         throw actionError('fill', selector, err);
@@ -177,6 +199,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
         const box = await locator.boundingBox();
         const startMs = collector.elapsed();
         await locator.hover();
+        const settledSnapshot = await takeSnapshot();
         collector.emit({
           type: 'action',
           action: 'hover',
@@ -185,6 +208,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
           boundingBox: box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null,
           timestampMs: startMs,
           settledAtMs: collector.elapsed(),
+          ...(settledSnapshot ? { settledSnapshot } : {}),
         });
       } catch (err) {
         throw actionError('hover', selector, err);
@@ -196,6 +220,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
       const startMs = collector.elapsed();
       try {
         await page.keyboard.press(key);
+        const settledSnapshot = await takeSnapshot();
         collector.emit({
           type: 'action',
           action: 'press',
@@ -204,6 +229,7 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
           boundingBox: null,
           timestampMs: startMs,
           settledAtMs: collector.elapsed(),
+          ...(settledSnapshot ? { settledSnapshot } : {}),
         });
       } catch (err) {
         throw actionError('press', key, err);
@@ -219,8 +245,8 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
       await emitNarration(text);
     },
 
-    async transition(opts) {
-      const durationMs = opts?.duration ?? 500;
+    async transition(transitionOpts) {
+      const durationMs = transitionOpts?.duration ?? 500;
       if (durationMs <= 0 || !Number.isFinite(durationMs)) {
         throw new Error(`sw.transition() duration must be a positive number, got ${durationMs}`);
       }
@@ -228,10 +254,12 @@ export function createHelpers(page: Page, collector: TimelineCollector): Screenw
       if (events.length > 0 && events[events.length - 1].type === 'transition') {
         console.warn('sw.transition() called twice with no action between them — both transitions will stack at the same output position.');
       }
+      const pageSnapshot = await takeSnapshot();
       collector.emit({
         type: 'transition',
-        transition: opts?.type ?? 'fade',
+        transition: transitionOpts?.type ?? 'fade',
         durationMs,
+        ...(pageSnapshot ? { pageSnapshot } : {}),
       });
     },
   };

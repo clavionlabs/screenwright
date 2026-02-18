@@ -63,10 +63,22 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
   let capturing = false;
   let pendingScreenshot: Promise<void> = Promise.resolve();
 
+  let captureSnapshot: (() => Promise<string>) | undefined;
+
   if (captureMode === 'frames') {
     const framesDir = join(tempDir, 'frames');
+    const snapshotsDir = join(tempDir, 'snapshots');
     await mkdir(framesDir, { recursive: true });
+    await mkdir(snapshotsDir, { recursive: true });
     frameManifest = [];
+
+    let snapshotCounter = 0;
+    captureSnapshot = async (): Promise<string> => {
+      snapshotCounter++;
+      const filename = `snapshot-${String(snapshotCounter).padStart(6, '0')}.jpg`;
+      await page.screenshot({ path: join(snapshotsDir, filename), type: 'jpeg', quality: 90 });
+      return `snapshots/${filename}`;
+    };
 
     cdpSession = await context.newCDPSession(page);
 
@@ -110,7 +122,7 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
     });
   }
 
-  const sw = createHelpers(page, collector);
+  const sw = createHelpers(page, collector, captureSnapshot ? { captureSnapshot } : undefined);
 
   let videoFile: string | undefined;
   try {

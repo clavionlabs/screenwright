@@ -1,4 +1,4 @@
-import type { ActionEvent, SceneEvent, SceneSlideConfig, TimelineEvent, TransitionType } from '../timeline/types.js';
+import type { ActionEvent, SceneEvent, SceneSlideConfig, TimelineEvent, TransitionEvent, TransitionType } from '../timeline/types.js';
 
 export const DEFAULT_SLIDE_DURATION_MS = 2000;
 
@@ -17,8 +17,10 @@ export interface ResolvedTransition {
   timestampMs: number;
   transitionDurationMs: number;
   transition: TransitionType;
-  beforeSourceMs: number;
-  afterSourceMs: number;
+  /** Snapshot file path for exit content (before transition). */
+  beforeSnapshot: string | null;
+  /** Snapshot file path for entrance content (after transition). */
+  afterSnapshot: string | null;
   /** True when a visual action exists before this transition. */
   hasContentBefore: boolean;
   /** True when a visual action exists after this transition. */
@@ -41,8 +43,12 @@ export interface TransitionSegment {
   outputEndMs: number;
   durationMs: number;
   transition: TransitionType;
-  beforeSourceMs: number;
-  afterSourceMs: number;
+  beforeSnapshot: string | null;
+  afterSnapshot: string | null;
+  /** Index into the slides array for the adjacent slide before, or null. */
+  adjacentSlideBefore: number | null;
+  /** Index into the slides array for the adjacent slide after, or null. */
+  adjacentSlideAfter: number | null;
   hasContentBefore: boolean;
   hasContentAfter: boolean;
 }
@@ -65,19 +71,12 @@ export function resolveSlideScenes(
 }
 
 /**
- * Walk timeline events and resolve each transition's frame references.
+ * Walk timeline events and resolve each transition's snapshot references.
  *
- * Uses **array position** (not timestamps) to find surrounding actions,
- * because transitions don't consume source time so multiple events can
- * share a timestamp.
- *
- * beforeSourceMs = settledAtMs of the nearest preceding action.
- * afterSourceMs  = settledAtMs of the nearest following action **only if
- *   that action is directly adjacent** (no narration / wait / scene between
- *   them — cursor_target events are transparent).  When intervening content
- *   events exist the action isn't part of the transition's visual bridge,
- *   so we fall back to the transition's own timestamp (the page already has
- *   the right content at that moment).
+ * Uses **array position** to find surrounding actions. Adjacency matters:
+ * if the next action is directly adjacent (no narration/wait/scene between,
+ * cursor_target events are transparent), use its settledSnapshot. Otherwise
+ * fall back to the transition's own pageSnapshot.
  */
 export function resolveTransitions(events: TimelineEvent[]): ResolvedTransition[] {
   const result: ResolvedTransition[] = [];
@@ -98,16 +97,15 @@ export function resolveTransitions(events: TimelineEvent[]): ResolvedTransition[
       if (events[j].type !== 'cursor_target') adjacent = false;
     }
 
+    const te = event as TransitionEvent;
     result.push({
       timestampMs: event.timestampMs,
       transitionDurationMs: event.durationMs,
       transition: event.transition,
-      beforeSourceMs: lastBefore
-        ? (lastBefore.settledAtMs ?? lastBefore.timestampMs)
-        : event.timestampMs,
-      afterSourceMs: firstAfter && adjacent
-        ? (firstAfter.settledAtMs ?? firstAfter.timestampMs)
-        : event.timestampMs,
+      beforeSnapshot: lastBefore?.settledSnapshot ?? te.pageSnapshot ?? null,
+      afterSnapshot: firstAfter && adjacent
+        ? (firstAfter.settledSnapshot ?? null)
+        : (te.pageSnapshot ?? null),
       hasContentBefore: lastBefore !== null,
       hasContentAfter: firstAfter !== null,
       eventIndex: i,
@@ -201,6 +199,10 @@ export function computeOutputSegments(
   const slides: SlideSegment[] = [];
   const transSegs: TransitionSegment[] = [];
 
+  // First pass: build all segments in insertion order, tracking which are slides vs transitions.
+  interface SegEntry { kind: 'slide' | 'transition'; index: number }
+  const segOrder: SegEntry[] = [];
+
   let accumulated = 0;
   for (const ins of insertions) {
     const outputStart = ins.sourceTimeMs + accumulated;
@@ -209,6 +211,7 @@ export function computeOutputSegments(
     if (ins.kind === 'slide') {
       const sc = slideQueue[si++];
       if (sc) {
+        segOrder.push({ kind: 'slide', index: slides.length });
         slides.push({
           slideStartMs: outputStart,
           slideEndMs: outputEnd,
@@ -221,13 +224,16 @@ export function computeOutputSegments(
     } else {
       const rt = transQueue[ti++];
       if (rt) {
+        segOrder.push({ kind: 'transition', index: transSegs.length });
         transSegs.push({
           outputStartMs: outputStart,
           outputEndMs: outputEnd,
           durationMs: ins.durationMs,
           transition: rt.transition,
-          beforeSourceMs: rt.beforeSourceMs,
-          afterSourceMs: rt.afterSourceMs,
+          beforeSnapshot: rt.beforeSnapshot,
+          afterSnapshot: rt.afterSnapshot,
+          adjacentSlideBefore: null,
+          adjacentSlideAfter: null,
           hasContentBefore: rt.hasContentBefore,
           hasContentAfter: rt.hasContentAfter,
         });
@@ -235,6 +241,18 @@ export function computeOutputSegments(
     }
 
     accumulated += ins.durationMs;
+  }
+
+  // Second pass: link transitions to adjacent slides by position.
+  for (let k = 0; k < segOrder.length; k++) {
+    if (segOrder[k].kind !== 'transition') continue;
+    const seg = transSegs[segOrder[k].index];
+    if (k > 0 && segOrder[k - 1].kind === 'slide') {
+      seg.adjacentSlideBefore = segOrder[k - 1].index;
+    }
+    if (k < segOrder.length - 1 && segOrder[k + 1].kind === 'slide') {
+      seg.adjacentSlideAfter = segOrder[k + 1].index;
+    }
   }
 
   return { slides, transitions: transSegs };

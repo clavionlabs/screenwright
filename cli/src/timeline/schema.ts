@@ -33,6 +33,7 @@ const actionEventSchema = z.object({
     height: z.number().positive(),
   }).nullable(),
   settledAtMs: z.number().nonnegative().optional(),
+  settledSnapshot: z.string().optional(),
 });
 
 const cursorTargetEventSchema = z.object({
@@ -70,6 +71,7 @@ const transitionEventSchema = z.object({
   timestampMs: z.number().nonnegative(),
   transition: z.enum(transitionTypes),
   durationMs: z.number().positive(),
+  pageSnapshot: z.string().optional(),
 });
 
 const timelineEventSchema = z.discriminatedUnion('type', [

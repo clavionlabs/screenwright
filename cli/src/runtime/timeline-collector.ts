@@ -7,6 +7,7 @@ export class TimelineCollector {
   private events: TimelineEvent[] = [];
   private counter = 0;
   private startTime: number | null = null;
+  private excludedMs = 0;
 
   start(): void {
     this.startTime = performance.now();
@@ -14,7 +15,12 @@ export class TimelineCollector {
 
   elapsed(): number {
     if (this.startTime === null) throw new Error('TimelineCollector not started');
-    return Math.round(performance.now() - this.startTime);
+    return Math.round(performance.now() - this.startTime - this.excludedMs);
+  }
+
+  /** Subtract wall-clock time that shouldn't count as scenario time (e.g. screenshot I/O). */
+  excludeTime(ms: number): void {
+    this.excludedMs += ms;
   }
 
   nextId(): string {

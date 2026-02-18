@@ -436,4 +436,71 @@ describe('timelineSchema', () => {
     const result = timelineSchema.safeParse(bad);
     expect(result.success).toBe(false);
   });
+
+  it('accepts action with settledSnapshot', () => {
+    const timeline = {
+      ...sampleTimeline,
+      events: [{
+        type: 'action',
+        id: 'ev-001',
+        timestampMs: 100,
+        action: 'click',
+        selector: '.btn',
+        durationMs: 200,
+        boundingBox: { x: 10, y: 20, width: 100, height: 40 },
+        settledAtMs: 250,
+        settledSnapshot: 'snapshots/snapshot-000001.jpg',
+      }],
+    };
+    const result = timelineSchema.safeParse(timeline);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts action without settledSnapshot', () => {
+    const timeline = {
+      ...sampleTimeline,
+      events: [{
+        type: 'action',
+        id: 'ev-001',
+        timestampMs: 100,
+        action: 'click',
+        selector: '.btn',
+        durationMs: 200,
+        boundingBox: { x: 10, y: 20, width: 100, height: 40 },
+      }],
+    };
+    const result = timelineSchema.safeParse(timeline);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts transition with pageSnapshot', () => {
+    const timeline = {
+      ...sampleTimeline,
+      events: [{
+        type: 'transition',
+        id: 'ev-001',
+        timestampMs: 5000,
+        transition: 'fade',
+        durationMs: 500,
+        pageSnapshot: 'snapshots/snapshot-000003.jpg',
+      }],
+    };
+    const result = timelineSchema.safeParse(timeline);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts transition without pageSnapshot', () => {
+    const timeline = {
+      ...sampleTimeline,
+      events: [{
+        type: 'transition',
+        id: 'ev-001',
+        timestampMs: 5000,
+        transition: 'fade',
+        durationMs: 500,
+      }],
+    };
+    const result = timelineSchema.safeParse(timeline);
+    expect(result.success).toBe(true);
+  });
 });
