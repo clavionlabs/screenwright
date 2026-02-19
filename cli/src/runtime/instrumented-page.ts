@@ -6,6 +6,7 @@ import type { Timeline, ManifestEntry, TransitionMarker } from '../timeline/type
 import { TimelineCollector } from './timeline-collector.js';
 import { createHelpers, type ScreenwrightHelpers, type RecordingContext } from './action-helpers.js';
 import type { PregeneratedNarration } from './narration-preprocess.js';
+import type { BrandingConfig } from '../config/config-schema.js';
 
 export type ScenarioFn = (sw: ScreenwrightHelpers) => Promise<void>;
 
@@ -17,6 +18,7 @@ export interface RunOptions {
   locale?: string;
   timezoneId?: string;
   pregenerated?: PregeneratedNarration[];
+  branding?: BrandingConfig;
 }
 
 export interface RunResult {
@@ -151,7 +153,7 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
   // Expose transitionMarkers for the back-to-back transition warning hack
   (ctx as any)._transitionMarkers = transitionMarkers;
 
-  const sw = createHelpers(page, collector, ctx);
+  const sw = createHelpers(page, collector, ctx, opts.branding);
 
   try {
     // Start capture loop

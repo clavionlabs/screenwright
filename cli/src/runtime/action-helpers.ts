@@ -2,6 +2,7 @@ import type { Page } from 'playwright';
 import type { TimelineCollector } from './timeline-collector.js';
 import type { ManifestEntry, TransitionMarker, SceneSlideConfig, TransitionType } from '../timeline/types.js';
 import type { PregeneratedNarration } from './narration-preprocess.js';
+import type { BrandingConfig } from '../config/config-schema.js';
 
 export interface ActionOptions {
   narration?: string;
@@ -69,10 +70,11 @@ async function injectSlideOverlay(
   title: string,
   description: string | undefined,
   config: SceneSlideConfig,
+  branding?: BrandingConfig,
 ): Promise<void> {
-  const brandColor = config.brandColor ?? '#000000';
-  const textColor = config.textColor ?? '#FFFFFF';
-  const fontFamily = config.fontFamily;
+  const brandColor = config.brandColor ?? branding?.brandColor ?? '#000000';
+  const textColor = config.textColor ?? branding?.textColor ?? '#FFFFFF';
+  const fontFamily = config.fontFamily ?? branding?.fontFamily;
   const titleFontSize = config.titleFontSize ?? 64;
   const descFontSize = Math.round(titleFontSize * 0.44);
   const resolvedFont = fontFamily
@@ -145,7 +147,7 @@ async function removeSlideOverlay(page: Page): Promise<void> {
   `).catch(() => {});
 }
 
-export function createHelpers(page: Page, collector: TimelineCollector, ctx: RecordingContext): ScreenwrightHelpers {
+export function createHelpers(page: Page, collector: TimelineCollector, ctx: RecordingContext, branding?: BrandingConfig): ScreenwrightHelpers {
   let lastX = 640;
   let lastY = 360;
 
@@ -228,7 +230,7 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
         await ctx.pauseCapture();
         const slideDurationMs = slide.duration ?? DEFAULT_SLIDE_DURATION_MS;
 
-        await injectSlideOverlay(page, title, description, slide);
+        await injectSlideOverlay(page, title, description, slide, branding);
         try {
           const file = await ctx.captureOneFrame();
           const holdFrames = msToFrames(slideDurationMs);

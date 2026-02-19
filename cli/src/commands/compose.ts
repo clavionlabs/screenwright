@@ -121,6 +121,7 @@ export const composeCommand = new Command('compose')
         testFile: scenarioPath,
         viewport: { width, height },
         pregenerated: pregenerated.length > 0 ? pregenerated : undefined,
+        branding: config.branding,
       });
       timeline = result.timeline;
       tempDir = result.tempDir;
