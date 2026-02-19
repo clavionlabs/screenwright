@@ -2,10 +2,9 @@ import React from 'react';
 import { Composition, registerRoot } from 'remotion';
 import { z } from 'zod';
 import { DemoVideo } from './DemoVideo.js';
-import type { SceneEvent } from '../timeline/types.js';
 import { timelineSchema } from '../timeline/schema.js';
 import { brandingSchema } from '../config/config-schema.js';
-import { resolveSlideScenes, resolveTransitions, totalSlideDurationMs, totalTransitionDurationMs, msToFrames } from './time-remap.js';
+import { totalOutputFrames } from './frame-resolve.js';
 
 const propsSchema = z.object({
   timeline: timelineSchema,
@@ -25,30 +24,26 @@ export const RemotionRoot: React.FC = () => {
         height={720}
         defaultProps={{
           timeline: {
-            version: 1 as const,
+            version: 2 as const,
             metadata: {
               testFile: '',
               scenarioFile: '',
               recordedAt: new Date().toISOString(),
               viewport: { width: 1280, height: 720 },
-              videoDurationMs: 0,
-              videoFile: 'placeholder.webm',
+              frameManifest: [{ type: 'frame' as const, file: 'placeholder.jpg' }],
+              transitionMarkers: [],
             },
             events: [],
           },
         }}
         calculateMetadata={({ props }) => {
-          const fps = 30;
-          const scenes = props.timeline.events.filter((e): e is SceneEvent => e.type === 'scene');
-          const slideScenes = resolveSlideScenes(scenes, props.timeline.events);
-          const resolvedTransitions = resolveTransitions(props.timeline.events);
-          const totalMs = props.timeline.metadata.videoDurationMs
-            + totalSlideDurationMs(slideScenes)
-            + totalTransitionDurationMs(resolvedTransitions);
-          const durationInFrames = Math.max(30, msToFrames(totalMs, fps));
+          const total = totalOutputFrames(
+            props.timeline.metadata.frameManifest,
+            props.timeline.metadata.transitionMarkers,
+          );
           return {
-            durationInFrames,
-            fps,
+            durationInFrames: Math.max(30, total),
+            fps: 30,
             width: props.timeline.metadata.viewport.width,
             height: props.timeline.metadata.viewport.height,
           };

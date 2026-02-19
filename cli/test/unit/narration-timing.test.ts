@@ -1,11 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { Timeline } from '../../src/timeline/types.js';
 
-// Mock both engines before importing narration-timing
+// Mock both engines before importing narration-preprocess
 vi.mock('../../src/voiceover/piper-engine.js', () => ({
   synthesize: vi.fn().mockImplementation(async (text: string, outputPath: string) => ({
     audioPath: outputPath,
-    durationMs: text.split(/\s+/).length * 400, // ~150 WPM estimate
+    durationMs: text.split(/\s+/).length * 400,
   })),
 }));
 
@@ -16,140 +15,67 @@ vi.mock('../../src/voiceover/openai-engine.js', () => ({
   })),
 }));
 
-import { generateNarration } from '../../src/voiceover/narration-timing.js';
+import { pregenerateNarrations } from '../../src/runtime/narration-preprocess.js';
 import { synthesize as openaiSynthesize } from '../../src/voiceover/openai-engine.js';
 
-function makeTimeline(events: Timeline['events']): Timeline {
-  return {
-    version: 1,
-    metadata: {
-      testFile: 'test.spec.ts',
-      scenarioFile: 'demo.ts',
-      recordedAt: new Date().toISOString(),
-      viewport: { width: 1280, height: 720 },
-      videoDurationMs: 10000,
-      videoFile: '/tmp/test.webm',
-    },
-    events,
-  };
-}
+describe('pregenerateNarrations', () => {
+  it('generates audio files for all texts', async () => {
+    const result = await pregenerateNarrations(
+      ['Hello world', 'This is a demo'],
+      { tempDir: '/tmp' },
+    );
 
-describe('generateNarration', () => {
-  it('updates narration events with audioFile and audioDurationMs', async () => {
-    const timeline = makeTimeline([
-      { type: 'scene', id: 'ev-001', timestampMs: 0, title: 'Intro' },
-      { type: 'narration', id: 'ev-002', timestampMs: 500, text: 'Hello world' },
-      { type: 'narration', id: 'ev-003', timestampMs: 2000, text: 'This is a demo of the product' },
-    ]);
-
-    const result = await generateNarration(timeline, { tempDir: '/tmp' });
-
-    const narrations = result.events.filter(e => e.type === 'narration');
-    expect(narrations).toHaveLength(2);
-
-    for (const n of narrations) {
-      expect((n as any).audioFile).toBeDefined();
-      expect((n as any).audioDurationMs).toBeGreaterThan(0);
-    }
+    expect(result).toHaveLength(2);
+    expect(result[0].text).toBe('Hello world');
+    expect(result[0].audioFile).toMatch(/narration-0\.wav$/);
+    expect(result[0].durationMs).toBeGreaterThan(0);
+    expect(result[1].text).toBe('This is a demo');
+    expect(result[1].audioFile).toMatch(/narration-1\.wav$/);
   });
 
-  it('preserves non-narration events unchanged', async () => {
-    const timeline = makeTimeline([
-      { type: 'scene', id: 'ev-001', timestampMs: 0, title: 'Start' },
-      { type: 'narration', id: 'ev-002', timestampMs: 500, text: 'Hello' },
-      { type: 'wait', id: 'ev-003', timestampMs: 1000, durationMs: 500, reason: 'pacing' },
-    ]);
-
-    const result = await generateNarration(timeline, { tempDir: '/tmp' });
-
-    expect(result.events[0]).toEqual(timeline.events[0]);
-    expect(result.events[2]).toEqual(timeline.events[2]);
-  });
-
-  it('handles timeline with no narration events', async () => {
-    const timeline = makeTimeline([
-      { type: 'scene', id: 'ev-001', timestampMs: 0, title: 'Start' },
-    ]);
-
-    const result = await generateNarration(timeline, { tempDir: '/tmp' });
-    expect(result.events).toEqual(timeline.events);
-  });
-
-  it('generates unique audio filenames per narration', async () => {
-    const timeline = makeTimeline([
-      { type: 'narration', id: 'ev-001', timestampMs: 0, text: 'First' },
-      { type: 'narration', id: 'ev-002', timestampMs: 1000, text: 'Second' },
-    ]);
-
-    const result = await generateNarration(timeline, { tempDir: '/tmp' });
-    const files = result.events.map(e => (e as any).audioFile);
-    expect(files[0]).not.toBe(files[1]);
+  it('returns empty array for no texts', async () => {
+    const result = await pregenerateNarrations([], { tempDir: '/tmp' });
+    expect(result).toEqual([]);
   });
 
   it('uses .wav extension for piper provider', async () => {
-    const timeline = makeTimeline([
-      { type: 'narration', id: 'ev-001', timestampMs: 0, text: 'Hello' },
-    ]);
-
-    const result = await generateNarration(timeline, { tempDir: '/tmp', ttsProvider: 'piper' });
-    expect((result.events[0] as any).audioFile).toMatch(/\.wav$/);
+    const result = await pregenerateNarrations(
+      ['Hello'],
+      { tempDir: '/tmp', ttsProvider: 'piper' },
+    );
+    expect(result[0].audioFile).toMatch(/\.wav$/);
   });
 
   it('uses .mp3 extension for openai provider', async () => {
-    const timeline = makeTimeline([
-      { type: 'narration', id: 'ev-001', timestampMs: 0, text: 'Hello' },
-    ]);
-
-    const result = await generateNarration(timeline, { tempDir: '/tmp', ttsProvider: 'openai' });
-    expect((result.events[0] as any).audioFile).toMatch(/\.mp3$/);
-  });
-
-  it('expands narration_sync wait when actual audio is longer than estimate', async () => {
-    // Mock returns 400ms/word. "word word word" = 3 words = 1200ms actual.
-    // Set the narration_sync wait to only 500ms to simulate a too-short estimate.
-    const timeline = makeTimeline([
-      { type: 'narration', id: 'ev-001', timestampMs: 0, text: 'word word word' },
-      { type: 'wait', id: 'ev-002', timestampMs: 0, durationMs: 500, reason: 'narration_sync' },
-    ]);
-
-    const result = await generateNarration(timeline, { tempDir: '/tmp' });
-
-    const wait = result.events[1] as any;
-    expect(wait.reason).toBe('narration_sync');
-    // Should be expanded to at least the actual audio duration (1200ms)
-    expect(wait.durationMs).toBe(1200);
-  });
-
-  it('keeps narration_sync wait when already longer than audio', async () => {
-    // 1 word = 400ms actual. Wait is 5000ms — should stay 5000ms.
-    const timeline = makeTimeline([
-      { type: 'narration', id: 'ev-001', timestampMs: 0, text: 'hello' },
-      { type: 'wait', id: 'ev-002', timestampMs: 0, durationMs: 5000, reason: 'narration_sync' },
-    ]);
-
-    const result = await generateNarration(timeline, { tempDir: '/tmp' });
-
-    const wait = result.events[1] as any;
-    expect(wait.durationMs).toBe(5000);
+    const result = await pregenerateNarrations(
+      ['Hello'],
+      { tempDir: '/tmp', ttsProvider: 'openai' },
+    );
+    expect(result[0].audioFile).toMatch(/\.mp3$/);
   });
 
   it('passes openaiTtsInstructions to the openai engine', async () => {
-    const timeline = makeTimeline([
-      { type: 'narration', id: 'ev-001', timestampMs: 0, text: 'Hello' },
-    ]);
-
-    await generateNarration(timeline, {
-      tempDir: '/tmp',
-      ttsProvider: 'openai',
-      openaiVoice: 'coral',
-      openaiTtsInstructions: 'Be upbeat and enthusiastic.',
-    });
+    await pregenerateNarrations(
+      ['Hello'],
+      {
+        tempDir: '/tmp',
+        ttsProvider: 'openai',
+        openaiVoice: 'coral',
+        openaiTtsInstructions: 'Be upbeat and enthusiastic.',
+      },
+    );
 
     expect(openaiSynthesize).toHaveBeenCalledWith(
       'Hello',
-      expect.stringMatching(/narration-ev-001\.mp3$/),
+      expect.stringMatching(/narration-0\.mp3$/),
       'coral',
       'Be upbeat and enthusiastic.',
     );
+  });
+
+  it('preserves text order in results', async () => {
+    const texts = ['First', 'Second', 'Third'];
+    const result = await pregenerateNarrations(texts, { tempDir: '/tmp' });
+    expect(result.map(r => r.text)).toEqual(texts);
   });
 });

@@ -16,16 +16,12 @@ export interface RenderOptions {
  * Rewrite absolute file paths in the timeline to basenames.
  * Remotion components run in a browser (webpack) and resolve assets
  * via staticFile() against the publicDir — they only need filenames.
+ *
+ * frameManifest paths are already relative to publicDir — no rewrite needed.
  */
 function toStaticPaths(timeline: Timeline): Timeline {
-  const meta = { ...timeline.metadata };
-  if (meta.videoFile) {
-    meta.videoFile = basename(meta.videoFile);
-  }
-  // frameManifest paths are already relative to publicDir — no rewrite needed
   return {
     ...timeline,
-    metadata: meta,
     events: timeline.events.map(e => {
       if (e.type === 'narration' && e.audioFile) {
         return { ...e, audioFile: basename(e.audioFile) };

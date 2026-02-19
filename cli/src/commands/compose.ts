@@ -5,10 +5,11 @@ import { pathToFileURL } from 'node:url';
 import ora from 'ora';
 import chalk from 'chalk';
 import { runScenario, type ScenarioFn } from '../runtime/instrumented-page.js';
-import { generateNarration } from '../voiceover/narration-timing.js';
+import { extractNarrations, pregenerateNarrations, validateNarrationCount } from '../runtime/narration-preprocess.js';
 import { ensureDependencies } from '../voiceover/voice-models.js';
 import { renderDemoVideo } from '../composition/render.js';
 import { loadConfig } from '../config/load-config.js';
+import { expandedFrameCount } from '../composition/frame-resolve.js';
 
 export const composeCommand = new Command('compose')
   .description('Record and compose final demo video')
@@ -66,7 +67,52 @@ export const composeCommand = new Command('compose')
       process.exit(1);
     }
 
-    // 2. Run scenario in Playwright
+    // 2. PREPROCESS: Extract narrations from scenario
+    let pregenerated: { text: string; audioFile: string; durationMs: number }[] = [];
+    if (opts.voiceover !== false) {
+      spinner = ora('Extracting narrations').start();
+      try {
+        const texts = await extractNarrations(scenarioFn);
+        spinner.succeed(`Found ${texts.length} narration segments`);
+
+        if (texts.length > 0) {
+          // Validate API key before starting TTS
+          if (config.ttsProvider === 'openai' && !process.env.OPENAI_API_KEY) {
+            console.error(chalk.red('OPENAI_API_KEY is required when ttsProvider is "openai".'));
+            console.error(chalk.dim('Set it with: export OPENAI_API_KEY=sk-...'));
+            process.exit(1);
+          }
+
+          // 3. TTS: Pre-generate all narration audio in parallel
+          const tempNarrationDir = resolve(outputDir, '.narration-temp');
+          await mkdir(tempNarrationDir, { recursive: true });
+
+          spinner = ora(`Generating voiceover (${texts.length} segments via ${config.ttsProvider})`).start();
+          try {
+            const modelPath = config.ttsProvider === 'piper'
+              ? (await ensureDependencies(config.voice)).modelPath
+              : undefined;
+            pregenerated = await pregenerateNarrations(texts, {
+              tempDir: tempNarrationDir,
+              ttsProvider: config.ttsProvider,
+              modelPath,
+              openaiVoice: config.openaiVoice,
+              openaiTtsInstructions: config.openaiTtsInstructions,
+            });
+            spinner.succeed(`Generated ${texts.length} voiceover segments`);
+          } catch (err: any) {
+            spinner.warn('Voiceover generation failed — continuing without audio');
+            console.error(chalk.dim(err.message));
+            pregenerated = [];
+          }
+        }
+      } catch (err: any) {
+        spinner.warn('Narration extraction failed — continuing without voiceover');
+        console.error(chalk.dim(err.message));
+      }
+    }
+
+    // 4. RECORD: Run scenario in Playwright with pre-generated narrations
     spinner = ora('Recording scenario').start();
     let timeline, tempDir: string;
     try {
@@ -74,10 +120,18 @@ export const composeCommand = new Command('compose')
         scenarioFile: scenarioPath,
         testFile: scenarioPath,
         viewport: { width, height },
+        pregenerated: pregenerated.length > 0 ? pregenerated : undefined,
       });
       timeline = result.timeline;
       tempDir = result.tempDir;
-      spinner.succeed(`Recorded ${timeline.events.length} events`);
+
+      // 5. VALIDATE: Assert narration count matches
+      if (pregenerated.length > 0) {
+        validateNarrationCount(pregenerated.length, result.narrationCount);
+      }
+
+      const frameCount = expandedFrameCount(timeline.metadata.frameManifest);
+      spinner.succeed(`Recorded ${timeline.events.length} events, ${frameCount} frames`);
     } catch (err: any) {
       spinner.fail('Recording failed');
       console.error(chalk.red(err.message));
@@ -91,44 +145,11 @@ export const composeCommand = new Command('compose')
       process.exit(1);
     }
 
-    // 3. Generate voiceover (if enabled)
-    let finalTimeline = timeline;
-    if (opts.voiceover !== false) {
-      const narrationCount = timeline.events.filter(e => e.type === 'narration').length;
-      if (narrationCount > 0) {
-        // Validate API key before starting TTS loop
-        if (config.ttsProvider === 'openai' && !process.env.OPENAI_API_KEY) {
-          console.error(chalk.red('OPENAI_API_KEY is required when ttsProvider is "openai".'));
-          console.error(chalk.dim('Set it with: export OPENAI_API_KEY=sk-...'));
-          process.exit(1);
-        }
-
-        spinner = ora(`Generating voiceover (${narrationCount} segments via ${config.ttsProvider})`).start();
-        try {
-          const modelPath = config.ttsProvider === 'piper'
-            ? (await ensureDependencies(config.voice)).modelPath
-            : undefined;
-          finalTimeline = await generateNarration(timeline, {
-            tempDir,
-            modelPath,
-            ttsProvider: config.ttsProvider,
-            openaiVoice: config.openaiVoice,
-            openaiTtsInstructions: config.openaiTtsInstructions,
-          });
-          spinner.succeed(`Generated ${narrationCount} voiceover segments`);
-        } catch (err: any) {
-          spinner.warn('Voiceover generation failed — continuing without audio');
-          console.error(chalk.dim(err.message));
-          console.error(chalk.dim('Tip: use --no-voiceover to skip, or re-run "screenwright init".'));
-        }
-      }
-    }
-
-    // 4. Render final video via Remotion
+    // 6. COMPOSE: Render final video via Remotion
     spinner = ora('Composing final video').start();
     try {
       await renderDemoVideo({
-        timeline: finalTimeline,
+        timeline,
         outputPath,
         publicDir: tempDir,
         branding: config.branding,
@@ -145,17 +166,18 @@ export const composeCommand = new Command('compose')
       process.exit(1);
     }
 
-    // 5. Cleanup
+    // 7. Cleanup
     if (!opts.keepTemp) {
       await rm(tempDir, { recursive: true, force: true });
     } else {
       console.log(chalk.dim(`Temp files kept at: ${tempDir}`));
     }
 
-    // 6. Report
+    // 8. Report
     const fileStats = await stat(outputPath);
     const sizeMB = (fileStats.size / (1024 * 1024)).toFixed(1);
-    const durationSec = (finalTimeline.metadata.videoDurationMs / 1000).toFixed(0);
+    const totalFrames = expandedFrameCount(timeline.metadata.frameManifest);
+    const durationSec = (totalFrames / 30).toFixed(0);
     const mins = Math.floor(Number(durationSec) / 60);
     const secs = Number(durationSec) % 60;
 
@@ -163,5 +185,5 @@ export const composeCommand = new Command('compose')
     console.log(chalk.green(`  Demo video saved to: ${outputPath}`));
     console.log(chalk.dim(`  Duration: ${mins}:${String(secs).padStart(2, '0')}`));
     console.log(chalk.dim(`  Size: ${sizeMB} MB`));
-    console.log(chalk.dim(`  Events: ${finalTimeline.events.length}`));
+    console.log(chalk.dim(`  Events: ${timeline.events.length}`));
   });

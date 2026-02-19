@@ -1,12 +1,16 @@
 {
-  "version": 1,
+  "version": 2,
   "metadata": {
     "testFile": "tests/checkout.spec.ts",
     "scenarioFile": "demos/checkout-demo.ts",
     "recordedAt": "2026-02-13T12:00:00Z",
     "viewport": { "width": 1280, "height": 720 },
-    "videoDurationMs": 45000,
-    "videoFile": "/tmp/screenwright-abc/recording.webm"
+    "frameManifest": [
+      { "type": "frame", "file": "frames/frame-000001.jpg" },
+      { "type": "hold", "file": "frames/frame-000001.jpg", "count": 30 },
+      { "type": "frame", "file": "frames/frame-000002.jpg" }
+    ],
+    "transitionMarkers": []
   },
   "events": [
     {

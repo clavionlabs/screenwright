@@ -1,27 +1,11 @@
 import type { Timeline, TimelineMetadata, TimelineEvent } from '../timeline/types.js';
 import { timelineSchema } from '../timeline/schema.js';
 
-type PartialEvent = { type: string; id?: string; timestampMs?: number; [key: string]: unknown };
+type PartialEvent = { type: string; id?: string; timestampMs: number; [key: string]: unknown };
 
 export class TimelineCollector {
   private events: TimelineEvent[] = [];
   private counter = 0;
-  private startTime: number | null = null;
-  private excludedMs = 0;
-
-  start(): void {
-    this.startTime = performance.now();
-  }
-
-  elapsed(): number {
-    if (this.startTime === null) throw new Error('TimelineCollector not started');
-    return Math.round(performance.now() - this.startTime - this.excludedMs);
-  }
-
-  /** Subtract wall-clock time that shouldn't count as scenario time (e.g. screenshot I/O). */
-  excludeTime(ms: number): void {
-    this.excludedMs += ms;
-  }
 
   nextId(): string {
     return `ev-${String(++this.counter).padStart(3, '0')}`;
@@ -29,8 +13,7 @@ export class TimelineCollector {
 
   emit(event: PartialEvent): string {
     const id = event.id ?? this.nextId();
-    const timestampMs = event.timestampMs ?? this.elapsed();
-    const full = { ...event, id, timestampMs } as TimelineEvent;
+    const full = { ...event, id } as TimelineEvent;
     this.events.push(full);
     return id;
   }
@@ -41,7 +24,7 @@ export class TimelineCollector {
 
   finalize(metadata: TimelineMetadata): Timeline {
     const timeline: Timeline = {
-      version: 1,
+      version: 2,
       metadata,
       events: [...this.events],
     };

@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { resolve, basename } from 'node:path';
-import { access, mkdir, copyFile } from 'node:fs/promises';
+import { resolve, basename, join } from 'node:path';
+import { access, mkdir, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import ora from 'ora';
 import chalk from 'chalk';
@@ -9,7 +9,7 @@ import { runScenario, type ScenarioFn } from '../runtime/instrumented-page.js';
 export const previewCommand = new Command('preview')
   .description('Quick preview without cursor overlay or voiceover')
   .argument('<scenario>', 'Path to demo scenario file')
-  .option('--out <path>', 'Output path for preview video')
+  .option('--out <path>', 'Output path for preview timeline')
   .action(async (scenario: string, opts) => {
     const scenarioPath = resolve(scenario);
 
@@ -24,7 +24,7 @@ export const previewCommand = new Command('preview')
     const outputDir = resolve(opts.out ? resolve(opts.out, '..') : './output');
     const outputPath = opts.out
       ? resolve(opts.out)
-      : resolve(outputDir, `${basename(scenarioPath, '.ts')}-preview.webm`);
+      : resolve(outputDir, `${basename(scenarioPath, '.ts')}-preview.json`);
 
     await mkdir(outputDir, { recursive: true });
 
@@ -46,23 +46,20 @@ export const previewCommand = new Command('preview')
       process.exit(1);
     }
 
-    // 2. Run scenario
+    // 2. Run scenario (frame-based recording)
     spinner = ora('Recording preview').start();
     try {
       const result = await runScenario(scenarioFn, {
         scenarioFile: scenarioPath,
         testFile: scenarioPath,
-        captureMode: 'video',
       });
       const { timeline } = result;
 
-      if (!result.videoFile) {
-        spinner.fail('No video file produced');
-        process.exit(1);
-      }
-      await copyFile(result.videoFile, outputPath);
-      spinner.succeed(`Preview saved to: ${outputPath}`);
+      await writeFile(outputPath, JSON.stringify(timeline, null, 2));
+      spinner.succeed(`Preview timeline saved to: ${outputPath}`);
       console.log(chalk.dim(`  ${timeline.events.length} events recorded`));
+      console.log(chalk.dim(`  ${timeline.metadata.frameManifest.length} manifest entries`));
+      console.log(chalk.dim(`  Frames at: ${join(result.tempDir, 'frames')}`));
     } catch (err: any) {
       spinner.fail('Recording failed');
       console.error(chalk.red(err.message));

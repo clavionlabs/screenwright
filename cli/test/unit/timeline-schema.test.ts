@@ -9,7 +9,7 @@ describe('timelineSchema', () => {
   });
 
   it('rejects wrong version', () => {
-    const bad = { ...sampleTimeline, version: 2 };
+    const bad = { ...sampleTimeline, version: 1 };
     const result = timelineSchema.safeParse(bad);
     expect(result.success).toBe(false);
   });
@@ -246,83 +246,6 @@ describe('timelineSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts valid transition event', () => {
-    const timeline = {
-      ...sampleTimeline,
-      events: [{
-        type: 'transition',
-        id: 'ev-001',
-        timestampMs: 5000,
-        transition: 'fade',
-        durationMs: 500,
-      }],
-    };
-    const result = timelineSchema.safeParse(timeline);
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts all transition types', () => {
-    for (const t of ['fade', 'wipe', 'slide-up', 'slide-left', 'zoom']) {
-      const timeline = {
-        ...sampleTimeline,
-        events: [{
-          type: 'transition',
-          id: 'ev-001',
-          timestampMs: 0,
-          transition: t,
-          durationMs: 500,
-        }],
-      };
-      const result = timelineSchema.safeParse(timeline);
-      expect(result.success).toBe(true);
-    }
-  });
-
-  it('rejects transition with invalid type', () => {
-    const bad = {
-      ...sampleTimeline,
-      events: [{
-        type: 'transition',
-        id: 'ev-001',
-        timestampMs: 0,
-        transition: 'spiral',
-        durationMs: 500,
-      }],
-    };
-    const result = timelineSchema.safeParse(bad);
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects transition with zero durationMs', () => {
-    const bad = {
-      ...sampleTimeline,
-      events: [{
-        type: 'transition',
-        id: 'ev-001',
-        timestampMs: 0,
-        transition: 'fade',
-        durationMs: 0,
-      }],
-    };
-    const result = timelineSchema.safeParse(bad);
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects transition with negative durationMs', () => {
-    const bad = {
-      ...sampleTimeline,
-      events: [{
-        type: 'transition',
-        id: 'ev-001',
-        timestampMs: 0,
-        transition: 'fade',
-        durationMs: -100,
-      }],
-    };
-    const result = timelineSchema.safeParse(bad);
-    expect(result.success).toBe(false);
-  });
-
   it('accepts action with settledAtMs', () => {
     const timeline = {
       ...sampleTimeline,
@@ -399,15 +322,14 @@ describe('timelineSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('accepts frameManifest without videoFile', () => {
-    const { videoFile, ...metaNoVideo } = sampleTimeline.metadata;
+  it('validates frameManifest entries', () => {
     const timeline = {
       ...sampleTimeline,
       metadata: {
-        ...metaNoVideo,
+        ...sampleTimeline.metadata,
         frameManifest: [
-          { timestampMs: 0, file: 'frames/frame-000001.jpg' },
-          { timestampMs: 500, file: 'frames/frame-000002.jpg' },
+          { type: 'frame', file: 'frames/frame-000001.jpg' },
+          { type: 'hold', file: 'frames/frame-000001.jpg', count: 30 },
         ],
       },
     };
@@ -415,92 +337,87 @@ describe('timelineSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts videoFile without frameManifest (backward compat)', () => {
-    const result = timelineSchema.safeParse(sampleTimeline);
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects neither videoFile nor frameManifest', () => {
-    const { videoFile, ...metaNoVideo } = sampleTimeline.metadata;
-    const bad = { ...sampleTimeline, metadata: metaNoVideo };
-    const result = timelineSchema.safeParse(bad);
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects empty frameManifest without videoFile', () => {
-    const { videoFile, ...metaNoVideo } = sampleTimeline.metadata;
+  it('rejects empty frameManifest', () => {
     const bad = {
       ...sampleTimeline,
-      metadata: { ...metaNoVideo, frameManifest: [] },
+      metadata: {
+        ...sampleTimeline.metadata,
+        frameManifest: [],
+      },
     };
     const result = timelineSchema.safeParse(bad);
     expect(result.success).toBe(false);
   });
 
-  it('accepts action with settledSnapshot', () => {
+  it('rejects hold with zero count', () => {
+    const bad = {
+      ...sampleTimeline,
+      metadata: {
+        ...sampleTimeline.metadata,
+        frameManifest: [
+          { type: 'hold', file: 'frames/frame-000001.jpg', count: 0 },
+        ],
+      },
+    };
+    const result = timelineSchema.safeParse(bad);
+    expect(result.success).toBe(false);
+  });
+
+  it('validates transitionMarkers', () => {
     const timeline = {
       ...sampleTimeline,
-      events: [{
-        type: 'action',
-        id: 'ev-001',
-        timestampMs: 100,
-        action: 'click',
-        selector: '.btn',
-        durationMs: 200,
-        boundingBox: { x: 10, y: 20, width: 100, height: 40 },
-        settledAtMs: 250,
-        settledSnapshot: 'snapshots/snapshot-000001.jpg',
-      }],
+      metadata: {
+        ...sampleTimeline.metadata,
+        transitionMarkers: [
+          { afterEntryIndex: 0, transition: 'fade', durationFrames: 15 },
+        ],
+      },
     };
     const result = timelineSchema.safeParse(timeline);
     expect(result.success).toBe(true);
   });
 
-  it('accepts action without settledSnapshot', () => {
-    const timeline = {
+  it('rejects transition marker with invalid transition type', () => {
+    const bad = {
       ...sampleTimeline,
-      events: [{
-        type: 'action',
-        id: 'ev-001',
-        timestampMs: 100,
-        action: 'click',
-        selector: '.btn',
-        durationMs: 200,
-        boundingBox: { x: 10, y: 20, width: 100, height: 40 },
-      }],
+      metadata: {
+        ...sampleTimeline.metadata,
+        transitionMarkers: [
+          { afterEntryIndex: 0, transition: 'spiral', durationFrames: 15 },
+        ],
+      },
     };
-    const result = timelineSchema.safeParse(timeline);
-    expect(result.success).toBe(true);
+    const result = timelineSchema.safeParse(bad);
+    expect(result.success).toBe(false);
   });
 
-  it('accepts transition with pageSnapshot', () => {
-    const timeline = {
+  it('rejects transition marker with zero durationFrames', () => {
+    const bad = {
       ...sampleTimeline,
-      events: [{
-        type: 'transition',
-        id: 'ev-001',
-        timestampMs: 5000,
-        transition: 'fade',
-        durationMs: 500,
-        pageSnapshot: 'snapshots/snapshot-000003.jpg',
-      }],
+      metadata: {
+        ...sampleTimeline.metadata,
+        transitionMarkers: [
+          { afterEntryIndex: 0, transition: 'fade', durationFrames: 0 },
+        ],
+      },
     };
-    const result = timelineSchema.safeParse(timeline);
-    expect(result.success).toBe(true);
+    const result = timelineSchema.safeParse(bad);
+    expect(result.success).toBe(false);
   });
 
-  it('accepts transition without pageSnapshot', () => {
-    const timeline = {
-      ...sampleTimeline,
-      events: [{
-        type: 'transition',
-        id: 'ev-001',
-        timestampMs: 5000,
-        transition: 'fade',
-        durationMs: 500,
-      }],
-    };
-    const result = timelineSchema.safeParse(timeline);
-    expect(result.success).toBe(true);
+  it('accepts all transition types in markers', () => {
+    for (const t of ['fade', 'wipe', 'slide-up', 'slide-left', 'zoom', 'doorway', 'swap', 'cube']) {
+      const timeline = {
+        ...sampleTimeline,
+        metadata: {
+          ...sampleTimeline.metadata,
+          transitionMarkers: [
+            { afterEntryIndex: 0, transition: t, durationFrames: 10 },
+          ],
+        },
+      };
+      const result = timelineSchema.safeParse(timeline);
+      expect(result.success).toBe(true);
+    }
   });
 });

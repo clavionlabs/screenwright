@@ -1,10 +1,11 @@
-import { chromium, type CDPSession } from 'playwright';
+import { chromium } from 'playwright';
 import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Timeline, FrameEntry } from '../timeline/types.js';
+import type { Timeline, ManifestEntry, TransitionMarker } from '../timeline/types.js';
 import { TimelineCollector } from './timeline-collector.js';
-import { createHelpers, type ScreenwrightHelpers } from './action-helpers.js';
+import { createHelpers, type ScreenwrightHelpers, type RecordingContext } from './action-helpers.js';
+import type { PregeneratedNarration } from './narration-preprocess.js';
 
 export type ScenarioFn = (sw: ScreenwrightHelpers) => Promise<void>;
 
@@ -15,38 +16,39 @@ export interface RunOptions {
   colorScheme?: 'light' | 'dark';
   locale?: string;
   timezoneId?: string;
-  captureMode?: 'frames' | 'video';
+  pregenerated?: PregeneratedNarration[];
 }
 
 export interface RunResult {
   timeline: Timeline;
-  videoFile?: string;
   tempDir: string;
+  narrationCount: number;
+}
+
+const FRAME_INTERVAL_MS = 1000 / 30;
+const DPR = 2;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(r => setTimeout(r, Math.max(0, ms)));
 }
 
 export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promise<RunResult> {
   const viewport = opts.viewport ?? { width: 1280, height: 720 };
-  const DPR = 2;
   const tempDir = await mkdtemp(join(tmpdir(), 'screenwright-'));
-  const captureMode = opts.captureMode ?? 'frames';
+  const framesDir = join(tempDir, 'frames');
+  await mkdir(framesDir, { recursive: true });
 
   const browser = await chromium.launch({
     args: ['--disable-gpu', '--font-render-hinting=none', '--disable-lcd-text'],
   });
 
-  const contextOpts: Record<string, unknown> = {
+  const context = await browser.newContext({
     viewport,
     deviceScaleFactor: DPR,
     colorScheme: opts.colorScheme ?? 'light',
     locale: opts.locale ?? 'en-US',
     timezoneId: opts.timezoneId ?? 'America/New_York',
-  };
-
-  if (captureMode === 'video') {
-    contextOpts.recordVideo = { dir: tempDir, size: viewport };
-  }
-
-  const context = await browser.newContext(contextOpts);
+  });
 
   // Hide the native cursor so only the Screenwright overlay cursor appears
   await context.addInitScript(`
@@ -57,133 +59,139 @@ export async function runScenario(scenario: ScenarioFn, opts: RunOptions): Promi
 
   const page = await context.newPage();
   const collector = new TimelineCollector();
-  let frameManifest: FrameEntry[] | undefined;
-  let cdpSession: CDPSession | undefined;
-  let frameCounter = 0;
-  let capturing = false;
+  const manifest: ManifestEntry[] = [];
+  const transitionMarkers: TransitionMarker[] = [];
+
+  // Narration queue from pre-generated audio
+  const narrationQueue = opts.pregenerated ? [...opts.pregenerated] : [];
+  let narrationConsumed = 0;
+
+  // Virtual clock: each frame = exactly 1000/30 ms
+  let virtualFrameIndex = 0;
+  let frameFileCounter = 0;
+
+  // Capture loop state
+  let captureRunning = false;
   let pendingScreenshot: Promise<void> = Promise.resolve();
 
-  let captureSnapshot: (() => Promise<string>) | undefined;
-
-  if (captureMode === 'frames') {
-    const framesDir = join(tempDir, 'frames');
-    const snapshotsDir = join(tempDir, 'snapshots');
-    await mkdir(framesDir, { recursive: true });
-    await mkdir(snapshotsDir, { recursive: true });
-    frameManifest = [];
-
-    let snapshotCounter = 0;
-    captureSnapshot = async (): Promise<string> => {
-      snapshotCounter++;
-      const filename = `snapshot-${String(snapshotCounter).padStart(6, '0')}.jpg`;
-      await page.screenshot({ path: join(snapshotsDir, filename), type: 'jpeg', quality: 90 });
-      return `snapshots/${filename}`;
-    };
-
-    cdpSession = await context.newCDPSession(page);
-
-    // Hybrid approach: CDP screencast detects WHEN the page changes (high fps,
-    // low overhead). On each change we take a page.screenshot() which captures
-    // at the full deviceScaleFactor resolution (2×). The screencast pixel data
-    // itself is discarded — it only serves as a timing signal.
-    cdpSession.on('Page.screencastFrame', (params: { sessionId: number }) => {
-      cdpSession!.send('Page.screencastFrameAck', { sessionId: params.sessionId }).catch(() => {});
-
-      if (capturing) return;
-      capturing = true;
-      const capturedAt = collector.elapsed();
-      pendingScreenshot = (async () => {
-        try {
-          frameCounter++;
-          const filename = `frame-${String(frameCounter).padStart(6, '0')}.jpg`;
-          const filePath = join(framesDir, filename);
-          await page.screenshot({ path: filePath, type: 'jpeg', quality: 90 });
-          frameManifest!.push({
-            timestampMs: capturedAt,
-            file: `frames/${filename}`,
-          });
-        } catch {
-          // Page may not be ready or is closing
-        }
-        capturing = false;
-      })();
-    });
+  async function runCaptureLoop() {
+    captureRunning = true;
+    while (captureRunning) {
+      const start = performance.now();
+      frameFileCounter++;
+      const filename = `frame-${String(frameFileCounter).padStart(6, '0')}.jpg`;
+      try {
+        await page.screenshot({ path: join(framesDir, filename), type: 'jpeg', quality: 90 });
+        manifest.push({ type: 'frame', file: `frames/${filename}` });
+        virtualFrameIndex++;
+      } catch {
+        // Page may not be ready or is closing
+      }
+      const elapsed = performance.now() - start;
+      await sleep(FRAME_INTERVAL_MS - elapsed);
+    }
   }
 
-  collector.start();
-
-  if (cdpSession) {
-    await cdpSession.send('Page.startScreencast', {
-      format: 'jpeg',
-      quality: 10,
-      maxWidth: viewport.width,
-      maxHeight: viewport.height,
-      everyNthFrame: 1,
-    });
+  async function pauseCapture(): Promise<void> {
+    captureRunning = false;
+    await pendingScreenshot;
   }
 
-  const sw = createHelpers(page, collector, captureSnapshot ? { captureSnapshot } : undefined);
+  function resumeCapture(): void {
+    if (!captureRunning) {
+      pendingScreenshot = runCaptureLoop();
+    }
+  }
 
-  let videoFile: string | undefined;
+  async function captureOneFrame(): Promise<string> {
+    frameFileCounter++;
+    const filename = `frame-${String(frameFileCounter).padStart(6, '0')}.jpg`;
+    await page.screenshot({ path: join(framesDir, filename), type: 'jpeg', quality: 90 });
+    const file = `frames/${filename}`;
+    manifest.push({ type: 'frame', file });
+    virtualFrameIndex++;
+    return file;
+  }
+
+  function addHold(file: string, count: number): void {
+    if (count <= 0) return;
+    manifest.push({ type: 'hold', file, count });
+    virtualFrameIndex += count;
+  }
+
+  function addTransitionMarker(marker: TransitionMarker): void {
+    transitionMarkers.push(marker);
+  }
+
+  function popNarration(): PregeneratedNarration {
+    if (narrationQueue.length === 0) {
+      throw new Error('No pre-generated narrations remaining in queue');
+    }
+    narrationConsumed++;
+    return narrationQueue.shift()!;
+  }
+
+  function currentTimeMs(): number {
+    return virtualFrameIndex * FRAME_INTERVAL_MS;
+  }
+
+  const ctx: RecordingContext = {
+    pauseCapture,
+    resumeCapture,
+    captureOneFrame,
+    addHold,
+    addTransitionMarker,
+    popNarration,
+    currentTimeMs,
+    get manifest() { return manifest; },
+    transitionPending: false,
+    get narrationCount() { return narrationConsumed; },
+  };
+
+  // Expose transitionMarkers for the back-to-back transition warning hack
+  (ctx as any)._transitionMarkers = transitionMarkers;
+
+  const sw = createHelpers(page, collector, ctx);
+
   try {
+    // Start capture loop
+    resumeCapture();
+
     await scenario(sw);
 
-    // Stop screencast and flush pending captures
-    if (cdpSession) {
-      await page.waitForTimeout(100);
-      await cdpSession.send('Page.stopScreencast').catch(() => {});
-      await pendingScreenshot;
+    // Stop capture loop and flush
+    await pauseCapture();
 
-      // Take one final 2× screenshot
-      try {
-        frameCounter++;
-        const filename = `frame-${String(frameCounter).padStart(6, '0')}.jpg`;
-        const filePath = join(join(tempDir, 'frames'), filename);
-        await page.screenshot({ path: filePath, type: 'jpeg', quality: 90 });
-        frameManifest!.push({
-          timestampMs: collector.elapsed(),
-          file: `frames/${filename}`,
-        });
-      } catch {
-        // Page may already be closing
-      }
-
-      await cdpSession.detach().catch(() => {});
+    // Take one final frame
+    try {
+      await captureOneFrame();
+    } catch {
+      // Page may already be closing
     }
 
-    // Close page to finalize video
-    await page.close();
-
-    if (captureMode === 'video') {
-      const video = page.video();
-      videoFile = video ? await video.path() : undefined;
+    // Warn about trailing transition
+    if (ctx.transitionPending) {
+      console.warn('sw.transition() at end of scenario with no following content — discarding marker.');
+      transitionMarkers.pop();
+      ctx.transitionPending = false;
     }
   } finally {
-    // Ensure browser resources are always cleaned up (idempotent if already closed)
     await page.close().catch(() => {});
     await context.close().catch(() => {});
     await browser.close().catch(() => {});
   }
-
-  const videoDurationMs = collector.getEvents()
-    .filter(e => e.type !== 'transition')
-    .reduce((max, e) => {
-      const ts = e.timestampMs + ('durationMs' in e ? (e.durationMs ?? 0) : 0);
-      return Math.max(max, ts);
-    }, 0);
 
   const timeline = collector.finalize({
     testFile: opts.testFile,
     scenarioFile: opts.scenarioFile,
     recordedAt: new Date().toISOString(),
     viewport,
-    videoDurationMs,
-    videoFile,
-    frameManifest,
+    frameManifest: manifest,
+    transitionMarkers,
   });
 
   const timelinePath = join(tempDir, 'timeline.json');
   await writeFile(timelinePath, JSON.stringify(timeline, null, 2));
 
-  return { timeline, videoFile, tempDir };
+  return { timeline, tempDir, narrationCount: narrationConsumed };
 }

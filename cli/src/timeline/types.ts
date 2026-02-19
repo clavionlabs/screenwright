@@ -1,10 +1,15 @@
-export interface FrameEntry {
-  timestampMs: number;
-  file: string;
+export type ManifestEntry =
+  | { type: 'frame'; file: string }
+  | { type: 'hold'; file: string; count: number };
+
+export interface TransitionMarker {
+  afterEntryIndex: number;
+  transition: TransitionType;
+  durationFrames: number;
 }
 
 export interface Timeline {
-  version: 1;
+  version: 2;
   metadata: TimelineMetadata;
   events: TimelineEvent[];
 }
@@ -14,9 +19,8 @@ export interface TimelineMetadata {
   scenarioFile: string;
   recordedAt: string;
   viewport: { width: number; height: number };
-  videoDurationMs: number;
-  videoFile?: string;
-  frameManifest?: FrameEntry[];
+  frameManifest: ManifestEntry[];
+  transitionMarkers: TransitionMarker[];
 }
 
 export type TimelineEvent =
@@ -24,8 +28,7 @@ export type TimelineEvent =
   | ActionEvent
   | CursorTargetEvent
   | NarrationEvent
-  | WaitEvent
-  | TransitionEvent;
+  | WaitEvent;
 
 export const transitionTypes = [
   'fade', 'wipe', 'slide-up', 'slide-left', 'zoom',
@@ -63,8 +66,6 @@ export interface ActionEvent {
   durationMs: number;
   boundingBox: { x: number; y: number; width: number; height: number } | null;
   settledAtMs?: number;
-  /** Path to a snapshot captured after the action settled. */
-  settledSnapshot?: string;
 }
 
 export interface CursorTargetEvent {
@@ -94,14 +95,4 @@ export interface WaitEvent {
   timestampMs: number;
   durationMs: number;
   reason: 'pacing' | 'narration_sync' | 'page_load';
-}
-
-export interface TransitionEvent {
-  type: 'transition';
-  id: string;
-  timestampMs: number;
-  transition: TransitionType;
-  durationMs: number;
-  /** Path to a snapshot of the page at transition time. */
-  pageSnapshot?: string;
 }

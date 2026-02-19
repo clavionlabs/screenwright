@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { calculateMoveDuration, createHelpers } from '../../src/runtime/action-helpers.js';
+import { calculateMoveDuration, createHelpers, type RecordingContext } from '../../src/runtime/action-helpers.js';
 import { TimelineCollector } from '../../src/runtime/timeline-collector.js';
+import type { ManifestEntry, TransitionMarker } from '../../src/timeline/types.js';
 
 function mockPage() {
   const locator = {
@@ -17,8 +18,45 @@ function mockPage() {
       press: vi.fn().mockResolvedValue(undefined),
     },
     locator: vi.fn().mockReturnValue({ first: () => locator }),
+    evaluate: vi.fn().mockResolvedValue(undefined),
+    url: vi.fn().mockReturnValue('http://localhost:3000'),
     _locator: locator,
   } as any;
+}
+
+function mockRecordingContext(narrations: { text: string; audioFile: string; durationMs: number }[] = []): RecordingContext {
+  const manifest: ManifestEntry[] = [];
+  const markers: TransitionMarker[] = [];
+  let virtualFrameIndex = 0;
+  let narrationIdx = 0;
+
+  const ctx: RecordingContext = {
+    pauseCapture: vi.fn().mockResolvedValue(undefined),
+    resumeCapture: vi.fn(),
+    captureOneFrame: vi.fn().mockImplementation(async () => {
+      const file = `frames/frame-${String(manifest.length + 1).padStart(6, '0')}.jpg`;
+      manifest.push({ type: 'frame', file });
+      virtualFrameIndex++;
+      return file;
+    }),
+    addHold: vi.fn().mockImplementation((file: string, count: number) => {
+      manifest.push({ type: 'hold', file, count });
+      virtualFrameIndex += count;
+    }),
+    addTransitionMarker: vi.fn().mockImplementation((marker: TransitionMarker) => {
+      markers.push(marker);
+    }),
+    popNarration: vi.fn().mockImplementation(() => {
+      if (narrationIdx >= narrations.length) throw new Error('No narrations');
+      return narrations[narrationIdx++];
+    }),
+    currentTimeMs: vi.fn().mockImplementation(() => virtualFrameIndex * (1000 / 30)),
+    get manifest() { return manifest; },
+    transitionPending: false,
+    get narrationCount() { return narrationIdx; },
+  };
+  (ctx as any)._transitionMarkers = markers;
+  return ctx;
 }
 
 describe('calculateMoveDuration', () => {
@@ -38,107 +76,72 @@ describe('calculateMoveDuration', () => {
 });
 
 describe('createHelpers', () => {
-  it('scene() with string description emits scene event without slide', async () => {
+  it('scene() without slide emits scene event only', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
-    await sw.scene('Intro', 'The beginning');
+    await sw.scene('Intro');
     const events = collector.getEvents();
 
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe('scene');
     const ev = events[0] as any;
     expect(ev.title).toBe('Intro');
-    expect(ev.description).toBe('The beginning');
-    expect(ev.slide).toBeUndefined();
+    expect(ctx.pauseCapture).not.toHaveBeenCalled();
   });
 
-  it('scene() with no second arg emits scene event without slide', async () => {
+  it('scene() with string description emits scene event', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
-    await sw.scene('Intro');
-    const events = collector.getEvents();
-
-    expect(events).toHaveLength(1);
-    const ev = events[0] as any;
-    expect(ev.title).toBe('Intro');
-    expect(ev.description).toBeUndefined();
-    expect(ev.slide).toBeUndefined();
-  });
-
-  it('scene() with empty slide object emits slide with defaults', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-
-    await sw.scene('Intro', { slide: {} });
-    const events = collector.getEvents();
-
-    expect(events).toHaveLength(1);
-    const ev = events[0] as any;
-    expect(ev.title).toBe('Intro');
-    expect(ev.description).toBeUndefined();
-    expect(ev.slide).toEqual({});
-  });
-
-  it('scene() with description-only object does not emit slide', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-
-    await sw.scene('Intro', { description: 'The beginning' });
+    await sw.scene('Intro', 'The beginning');
     const events = collector.getEvents();
 
     expect(events).toHaveLength(1);
     const ev = events[0] as any;
     expect(ev.title).toBe('Intro');
     expect(ev.description).toBe('The beginning');
-    expect(ev.slide).toBeUndefined();
   });
 
-  it('scene() with full options passes description and slide config', async () => {
+  it('scene() with slide pauses capture and injects DOM overlay', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
-    await sw.scene('Intro', {
-      description: 'The beginning',
-      slide: {
-        duration: 3000,
-        brandColor: '#4F46E5',
-        textColor: '#FFFFFF',
-        fontFamily: 'Inter',
-        titleFontSize: 72,
-      },
-    });
-    const events = collector.getEvents();
+    await sw.scene('Intro', { slide: { brandColor: '#4F46E5' } });
 
-    expect(events).toHaveLength(1);
-    const ev = events[0] as any;
-    expect(ev.title).toBe('Intro');
-    expect(ev.description).toBe('The beginning');
-    expect(ev.slide).toEqual({
-      duration: 3000,
-      brandColor: '#4F46E5',
-      textColor: '#FFFFFF',
-      fontFamily: 'Inter',
-      titleFontSize: 72,
-    });
+    expect(ctx.pauseCapture).toHaveBeenCalled();
+    expect(ctx.captureOneFrame).toHaveBeenCalled();
+    // Scene with slide does NOT resume capture — next action does
+    expect(ctx.resumeCapture).not.toHaveBeenCalled();
+    // DOM injection via page.evaluate
+    expect(page.evaluate).toHaveBeenCalled();
+  });
+
+  it('scene() with slide adds hold for duration', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
+
+    await sw.scene('Intro', { slide: { duration: 3000 } });
+
+    // 3000ms at 30fps = 90 frames. captureOneFrame adds 1, hold adds 89.
+    expect(ctx.addHold).toHaveBeenCalled();
+    const holdCall = (ctx.addHold as any).mock.calls[0];
+    expect(holdCall[1]).toBe(89); // 90 - 1 = 89
   });
 
   it('click() emits cursor_target then action events', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
     await sw.click('.btn');
     const events = collector.getEvents();
@@ -152,15 +155,16 @@ describe('createHelpers', () => {
   it('click() with narration emits narration first', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext([
+      { text: 'Click the button', audioFile: '/tmp/n0.wav', durationMs: 1000 },
+    ]);
+    const sw = createHelpers(page, collector, ctx);
 
     await sw.click('.btn', { narration: 'Click the button' });
     const events = collector.getEvents();
     const types = events.map(e => e.type);
 
     expect(types[0]).toBe('narration');
-    expect(types[1]).toBe('wait');
     expect(types).toContain('cursor_target');
     expect(types).toContain('action');
   });
@@ -168,8 +172,8 @@ describe('createHelpers', () => {
   it('fill() types characters with fixed delay', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
     await sw.fill('.input', 'abc');
     expect(page.keyboard.type).toHaveBeenCalledTimes(3);
@@ -181,8 +185,8 @@ describe('createHelpers', () => {
   it('navigate() emits action event', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
     await sw.navigate('http://localhost:3000');
     const events = collector.getEvents();
@@ -195,24 +199,25 @@ describe('createHelpers', () => {
   it('navigate() with narration emits narration after action', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext([
+      { text: 'Go to the page', audioFile: '/tmp/n0.wav', durationMs: 800 },
+    ]);
+    const sw = createHelpers(page, collector, ctx);
 
     await sw.navigate('http://localhost:3000', { narration: 'Go to the page' });
     const events = collector.getEvents();
     const types = events.map(e => e.type);
 
-    // navigate emits action first, then narration + wait
-    expect(types[0]).toBe('action');
-    expect(types[1]).toBe('narration');
-    expect(types[2]).toBe('wait');
+    // navigate emits narration first (from emitNarration), then action
+    expect(types[0]).toBe('narration');
+    expect(types).toContain('action');
   });
 
   it('wait() emits a pacing wait event and waits real time', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
     await sw.wait(2000);
     const events = collector.getEvents();
@@ -227,8 +232,8 @@ describe('createHelpers', () => {
   it('press() emits action event with key as selector', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
     await sw.press('Enter');
     const events = collector.getEvents();
@@ -241,8 +246,8 @@ describe('createHelpers', () => {
   it('updates cursor position across actions', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
     await sw.click('.first');
     await sw.click('.second');
@@ -250,182 +255,65 @@ describe('createHelpers', () => {
     const cursorEvents = collector.getEvents().filter(e => e.type === 'cursor_target');
     expect(cursorEvents).toHaveLength(2);
 
-    // Second cursor move should start from where first ended
     const second = cursorEvents[1] as any;
     const firstTarget = cursorEvents[0] as any;
     expect(second.fromX).toBe(firstTarget.toX);
     expect(second.fromY).toBe(firstTarget.toY);
   });
 
-  it('narration waits full estimated duration', async () => {
+  it('narrate() pauses capture, pops from queue, captures frame and holds', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext([
+      { text: 'Test narration', audioFile: '/tmp/n0.wav', durationMs: 2000 },
+    ]);
+    const sw = createHelpers(page, collector, ctx);
 
-    await sw.narrate('This is a test narration with several words.');
-    const events = collector.getEvents();
+    await sw.narrate('Test narration');
 
-    const waitEvent = events.find(e => e.type === 'wait' && (e as any).reason === 'narration_sync') as any;
-    expect(waitEvent).toBeDefined();
+    expect(ctx.pauseCapture).toHaveBeenCalled();
+    expect(ctx.popNarration).toHaveBeenCalled();
+    expect(ctx.captureOneFrame).toHaveBeenCalled();
+    expect(ctx.addHold).toHaveBeenCalled();
+    expect(ctx.resumeCapture).toHaveBeenCalled();
 
-    // 8 words → (8/150) * 60 * 1000 = 3200ms
-    expect(waitEvent.durationMs).toBe(3200);
-    expect(page.waitForTimeout).toHaveBeenCalledWith(3200);
+    const narrationEvent = collector.getEvents().find(e => e.type === 'narration') as any;
+    expect(narrationEvent.text).toBe('Test narration');
+    expect(narrationEvent.audioFile).toBe('/tmp/n0.wav');
+    expect(narrationEvent.audioDurationMs).toBe(2000);
   });
 
-  it('click() does not emit post-action wait', async () => {
+  it('transition() sets transitionPending and pauses capture', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-
-    await sw.click('.btn');
-    const events = collector.getEvents();
-    const waits = events.filter(e => e.type === 'wait');
-    expect(waits).toHaveLength(0);
-  });
-
-  it('cursor move waits real time for natural pacing', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-
-    await sw.click('.btn');
-
-    // cursor move should call page.waitForTimeout with the move duration
-    const cursorEvent = collector.getEvents().find(e => e.type === 'cursor_target') as any;
-    expect(page.waitForTimeout).toHaveBeenCalledWith(cursorEvent.moveDurationMs);
-  });
-
-  it('transition() emits transition event with defaults', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
     await sw.transition();
-    const events = collector.getEvents();
 
-    expect(events).toHaveLength(1);
-    expect(events[0].type).toBe('transition');
-    const ev = events[0] as any;
-    expect(ev.transition).toBe('fade');
-    expect(ev.durationMs).toBe(500);
+    expect(ctx.pauseCapture).toHaveBeenCalled();
+    expect(ctx.addTransitionMarker).toHaveBeenCalled();
+    expect(ctx.transitionPending).toBe(true);
   });
 
   it('transition() passes through custom type and duration', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
     await sw.transition({ type: 'wipe', duration: 800 });
-    const events = collector.getEvents();
 
-    const ev = events[0] as any;
-    expect(ev.transition).toBe('wipe');
-    expect(ev.durationMs).toBe(800);
-  });
-
-  it('transition() does not call page.waitForTimeout', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-
-    await sw.transition({ duration: 300 });
-    expect(page.waitForTimeout).not.toHaveBeenCalled();
-  });
-
-  it('transition() warns on back-to-back calls with no action between', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    await sw.transition();
-    expect(warnSpy).not.toHaveBeenCalled();
-
-    await sw.transition({ type: 'wipe' });
-    expect(warnSpy).toHaveBeenCalledOnce();
-    expect(warnSpy.mock.calls[0][0]).toContain('no action between');
-
-    warnSpy.mockRestore();
-  });
-
-  it('navigate() stamps settledAtMs after goto', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-
-    await sw.navigate('http://localhost:3000');
-    const events = collector.getEvents();
-    const ev = events[0] as any;
-    expect(ev.settledAtMs).toBeDefined();
-    expect(ev.settledAtMs).toBeGreaterThanOrEqual(ev.timestampMs);
-  });
-
-  it('click() stamps settledAtMs after click', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-
-    await sw.click('.btn');
-    const events = collector.getEvents();
-    const actionEvent = events.find(e => e.type === 'action') as any;
-    expect(actionEvent.settledAtMs).toBeDefined();
-    expect(actionEvent.settledAtMs).toBeGreaterThanOrEqual(actionEvent.timestampMs);
-  });
-
-  it('hover() stamps settledAtMs after hover', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-
-    await sw.hover('.btn');
-    const events = collector.getEvents();
-    const actionEvent = events.find(e => e.type === 'action') as any;
-    expect(actionEvent.settledAtMs).toBeDefined();
-    expect(actionEvent.settledAtMs).toBeGreaterThanOrEqual(actionEvent.timestampMs);
-  });
-
-  it('press() stamps settledAtMs after press', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-
-    await sw.press('Enter');
-    const events = collector.getEvents();
-    const ev = events[0] as any;
-    expect(ev.settledAtMs).toBeDefined();
-    expect(ev.settledAtMs).toBeGreaterThanOrEqual(ev.timestampMs);
-  });
-
-  it('fill() stamps settledAtMs after typing', async () => {
-    const page = mockPage();
-    const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
-
-    await sw.fill('.input', 'abc');
-    const events = collector.getEvents();
-    const actionEvent = events.find(e => e.type === 'action') as any;
-    expect(actionEvent.settledAtMs).toBeDefined();
-    expect(actionEvent.settledAtMs).toBeGreaterThanOrEqual(actionEvent.timestampMs);
+    const markerCall = (ctx.addTransitionMarker as any).mock.calls[0][0];
+    expect(markerCall.transition).toBe('wipe');
+    expect(markerCall.durationFrames).toBe(24); // ceil(800/1000 * 30)
   });
 
   it('transition() throws on zero duration', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
     await expect(sw.transition({ duration: 0 })).rejects.toThrow('positive number');
   });
@@ -433,8 +321,8 @@ describe('createHelpers', () => {
   it('transition() throws on negative duration', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
     await expect(sw.transition({ duration: -100 })).rejects.toThrow('positive number');
   });
@@ -442,116 +330,69 @@ describe('createHelpers', () => {
   it('transition() throws on NaN duration', async () => {
     const page = mockPage();
     const collector = new TimelineCollector();
-    collector.start();
-    const sw = createHelpers(page, collector);
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
     await expect(sw.transition({ duration: NaN })).rejects.toThrow('positive number');
   });
 
-  describe('captureSnapshot callback', () => {
-    it('click() stores settledSnapshot when callback provided', async () => {
-      const page = mockPage();
-      const collector = new TimelineCollector();
-      collector.start();
-      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000001.jpg');
-      const sw = createHelpers(page, collector, { captureSnapshot });
+  it('transition() warns on back-to-back calls', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      await sw.click('.btn');
-      expect(captureSnapshot).toHaveBeenCalledOnce();
-      const actionEvent = collector.getEvents().find(e => e.type === 'action') as any;
-      expect(actionEvent.settledSnapshot).toBe('snapshots/snapshot-000001.jpg');
-    });
+    await sw.transition();
+    expect(warnSpy).not.toHaveBeenCalled();
 
-    it('navigate() stores settledSnapshot when callback provided', async () => {
-      const page = mockPage();
-      const collector = new TimelineCollector();
-      collector.start();
-      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000001.jpg');
-      const sw = createHelpers(page, collector, { captureSnapshot });
+    await sw.transition({ type: 'wipe' });
+    expect(warnSpy).toHaveBeenCalledOnce();
 
-      await sw.navigate('http://localhost:3000');
-      expect(captureSnapshot).toHaveBeenCalledOnce();
-      const ev = collector.getEvents()[0] as any;
-      expect(ev.settledSnapshot).toBe('snapshots/snapshot-000001.jpg');
-    });
+    warnSpy.mockRestore();
+  });
 
-    it('fill() stores settledSnapshot when callback provided', async () => {
-      const page = mockPage();
-      const collector = new TimelineCollector();
-      collector.start();
-      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000001.jpg');
-      const sw = createHelpers(page, collector, { captureSnapshot });
+  it('click() resolves pending transition', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
-      await sw.fill('.input', 'abc');
-      expect(captureSnapshot).toHaveBeenCalledOnce();
-      const actionEvent = collector.getEvents().find(e => e.type === 'action') as any;
-      expect(actionEvent.settledSnapshot).toBe('snapshots/snapshot-000001.jpg');
-    });
+    await sw.transition();
+    expect(ctx.transitionPending).toBe(true);
 
-    it('hover() stores settledSnapshot when callback provided', async () => {
-      const page = mockPage();
-      const collector = new TimelineCollector();
-      collector.start();
-      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000001.jpg');
-      const sw = createHelpers(page, collector, { captureSnapshot });
+    await sw.click('.btn');
+    expect(ctx.transitionPending).toBe(false);
+    // captureOneFrame called: once for transition resolution
+    expect(ctx.captureOneFrame).toHaveBeenCalled();
+    expect(ctx.resumeCapture).toHaveBeenCalled();
+  });
 
-      await sw.hover('.btn');
-      expect(captureSnapshot).toHaveBeenCalledOnce();
-      const actionEvent = collector.getEvents().find(e => e.type === 'action') as any;
-      expect(actionEvent.settledSnapshot).toBe('snapshots/snapshot-000001.jpg');
-    });
+  it('navigate() resolves pending transition', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
-    it('press() stores settledSnapshot when callback provided', async () => {
-      const page = mockPage();
-      const collector = new TimelineCollector();
-      collector.start();
-      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000001.jpg');
-      const sw = createHelpers(page, collector, { captureSnapshot });
+    await sw.transition();
+    expect(ctx.transitionPending).toBe(true);
 
-      await sw.press('Enter');
-      expect(captureSnapshot).toHaveBeenCalledOnce();
-      const ev = collector.getEvents()[0] as any;
-      expect(ev.settledSnapshot).toBe('snapshots/snapshot-000001.jpg');
-    });
+    await sw.navigate('http://localhost:3000');
+    expect(ctx.transitionPending).toBe(false);
+  });
 
-    it('transition() stores pageSnapshot when callback provided', async () => {
-      const page = mockPage();
-      const collector = new TimelineCollector();
-      collector.start();
-      const captureSnapshot = vi.fn().mockResolvedValue('snapshots/snapshot-000002.jpg');
-      const sw = createHelpers(page, collector, { captureSnapshot });
+  it('wait() during transition captures and holds', async () => {
+    const page = mockPage();
+    const collector = new TimelineCollector();
+    const ctx = mockRecordingContext();
+    const sw = createHelpers(page, collector, ctx);
 
-      await sw.transition();
-      expect(captureSnapshot).toHaveBeenCalledOnce();
-      const ev = collector.getEvents()[0] as any;
-      expect(ev.pageSnapshot).toBe('snapshots/snapshot-000002.jpg');
-    });
+    ctx.transitionPending = true;
+    await sw.wait(500);
 
-    it('omits snapshot fields when no callback provided', async () => {
-      const page = mockPage();
-      const collector = new TimelineCollector();
-      collector.start();
-      const sw = createHelpers(page, collector);
-
-      await sw.click('.btn');
-      await sw.transition();
-      const events = collector.getEvents();
-      const actionEvent = events.find(e => e.type === 'action') as any;
-      const transitionEvent = events.find(e => e.type === 'transition') as any;
-      expect(actionEvent.settledSnapshot).toBeUndefined();
-      expect(transitionEvent.pageSnapshot).toBeUndefined();
-    });
-
-    it('swallows snapshot errors silently', async () => {
-      const page = mockPage();
-      const collector = new TimelineCollector();
-      collector.start();
-      const captureSnapshot = vi.fn().mockRejectedValue(new Error('screenshot failed'));
-      const sw = createHelpers(page, collector, { captureSnapshot });
-
-      await sw.click('.btn');
-      const actionEvent = collector.getEvents().find(e => e.type === 'action') as any;
-      expect(actionEvent.settledSnapshot).toBeUndefined();
-    });
+    expect(page.waitForTimeout).toHaveBeenCalledWith(500);
+    expect(ctx.captureOneFrame).toHaveBeenCalled();
+    // wait does NOT resolve the transition — transitionPending stays true
+    expect(ctx.transitionPending).toBe(true);
   });
 });

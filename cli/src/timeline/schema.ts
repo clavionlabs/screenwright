@@ -33,7 +33,6 @@ const actionEventSchema = z.object({
     height: z.number().positive(),
   }).nullable(),
   settledAtMs: z.number().nonnegative().optional(),
-  settledSnapshot: z.string().optional(),
 });
 
 const cursorTargetEventSchema = z.object({
@@ -65,31 +64,27 @@ const waitEventSchema = z.object({
   reason: z.enum(['pacing', 'narration_sync', 'page_load']),
 });
 
-const transitionEventSchema = z.object({
-  type: z.literal('transition'),
-  id: z.string(),
-  timestampMs: z.number().nonnegative(),
-  transition: z.enum(transitionTypes),
-  durationMs: z.number().positive(),
-  pageSnapshot: z.string().optional(),
-});
-
 const timelineEventSchema = z.discriminatedUnion('type', [
   sceneEventSchema,
   actionEventSchema,
   cursorTargetEventSchema,
   narrationEventSchema,
   waitEventSchema,
-  transitionEventSchema,
 ]);
 
-const frameEntrySchema = z.object({
-  timestampMs: z.number().nonnegative(),
-  file: z.string(),
+const manifestEntrySchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('frame'), file: z.string() }),
+  z.object({ type: z.literal('hold'), file: z.string(), count: z.number().int().positive() }),
+]);
+
+const transitionMarkerSchema = z.object({
+  afterEntryIndex: z.number().int().nonnegative(),
+  transition: z.enum(transitionTypes),
+  durationFrames: z.number().int().positive(),
 });
 
 export const timelineSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   metadata: z.object({
     testFile: z.string(),
     scenarioFile: z.string(),
@@ -98,13 +93,9 @@ export const timelineSchema = z.object({
       width: z.number().int().positive(),
       height: z.number().int().positive(),
     }),
-    videoDurationMs: z.number().nonnegative(),
-    videoFile: z.string().optional(),
-    frameManifest: z.array(frameEntrySchema).optional(),
-  }).refine(
-    m => (m.videoFile && m.videoFile.length > 0) || (m.frameManifest && m.frameManifest.length > 0),
-    { message: 'metadata must have either videoFile or a non-empty frameManifest' },
-  ),
+    frameManifest: z.array(manifestEntrySchema).min(1),
+    transitionMarkers: z.array(transitionMarkerSchema),
+  }),
   events: z.array(timelineEventSchema),
 }).refine(
   t => t.events.every(e => {
