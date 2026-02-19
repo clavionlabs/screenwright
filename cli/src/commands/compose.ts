@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { resolve, basename } from 'node:path';
-import { access, mkdir, rm, stat } from 'node:fs/promises';
+import { resolve, basename, join } from 'node:path';
+import { access, mkdir, rm, stat, copyFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import ora from 'ora';
 import chalk from 'chalk';
@@ -143,6 +143,13 @@ export const composeCommand = new Command('compose')
         console.error(chalk.dim('Check that selectors in the scenario match your app.'));
       }
       process.exit(1);
+    }
+
+    // Copy narration audio files into tempDir so Remotion can find them via staticFile()
+    for (const n of pregenerated) {
+      if (n.audioFile) {
+        await copyFile(n.audioFile, join(tempDir, basename(n.audioFile)));
+      }
     }
 
     // 6. COMPOSE: Render final video via Remotion
