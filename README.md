@@ -192,6 +192,39 @@ await sw.scene('Second Scene', { slide: { duration: 1500 } });
 
 Transitions work between any two visual states — slides, frame-based captures, or a mix of both.
 
+### Transition Timing
+
+When `sw.transition()` is followed by an action, the transition animation plays first, then the action executes in full view. The "after" frame of the transition is chosen to show the page **before** the action's visible effect begins:
+
+| Next action after `sw.transition()` | Transition ends on | Then you see |
+|---|---|---|
+| `sw.click(sel)` | Page before cursor moves | Cursor moves to element, click fires |
+| `sw.dblclick(sel)` | Page before cursor moves | Cursor moves to element, double-click fires |
+| `sw.fill(sel, value)` | Page before cursor moves | Cursor moves to input, text is typed character by character |
+| `sw.hover(sel)` | Page before cursor moves | Cursor moves to element, hover triggers |
+| `sw.press(key)` | Page before keypress | Keypress fires |
+| `sw.navigate(url)` | Loaded new page | Page is already visible (navigation happened during transition) |
+| `sw.scene(_, { slide })` | Slide overlay | Slide is already visible |
+
+This means the action's visual feedback (typing, hover effects, page changes from a click) always plays out naturally in the recorded frames rather than being hidden by the transition.
+
+## Frame Rate
+
+Screenwright records at **30 fps** by default. During recording, each captured screenshot advances a virtual clock by exactly `1000/30` ms, making the frame manifest authoritative for video timing.
+
+### Low-power machines
+
+If your machine can't sustain 30 fps (i.e., each screenshot takes longer than ~33 ms), the virtual clock falls behind wall time. This causes narration audio to overlap in the output because the virtual duration of each segment becomes shorter than the actual audio.
+
+Screenwright detects this automatically. If the actual capture rate drops below 85% of the target, you'll see a warning:
+
+```
+⚠ Capture loop averaged 18.2fps (target 30fps). Video timing may be inaccurate.
+  Consider setting fps: 18 in your screenwright config, or running on a faster machine.
+```
+
+Follow the suggestion to lower the frame rate to match your machine's capability. A lower frame rate with accurate timing produces better results than a higher frame rate with drift.
+
 ## Configuration
 
 `screenwright.config.ts` (created by `screenwright init`):

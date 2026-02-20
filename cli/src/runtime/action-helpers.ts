@@ -319,6 +319,7 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
       if (narration) emitNarrationEvent(narration);
 
       try {
+        await resolvePendingTransition();
         const center = await resolveCenter(selector);
         await moveCursorTo(center.x, center.y);
         const locator = page.locator(selector).first();
@@ -337,8 +338,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
       } catch (err) {
         throw actionError('click', selector, err);
       }
-
-      await resolvePendingTransition();
       if (narration) await sleepRemainingNarration(narStartMs, narration.durationMs);
     },
 
@@ -349,6 +348,7 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
       if (narration) emitNarrationEvent(narration);
 
       try {
+        await resolvePendingTransition();
         const center = await resolveCenter(selector);
         await moveCursorTo(center.x, center.y);
         const locator = page.locator(selector).first();
@@ -367,8 +367,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
       } catch (err) {
         throw actionError('dblclick', selector, err);
       }
-
-      await resolvePendingTransition();
       if (narration) await sleepRemainingNarration(narStartMs, narration.durationMs);
     },
 
@@ -379,6 +377,7 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
       if (narration) emitNarrationEvent(narration);
 
       try {
+        await resolvePendingTransition();
         const center = await resolveCenter(selector);
         await moveCursorTo(center.x, center.y);
         const locator = page.locator(selector).first();
@@ -401,8 +400,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
       } catch (err) {
         throw actionError('fill', selector, err);
       }
-
-      await resolvePendingTransition();
       if (narration) await sleepRemainingNarration(narStartMs, narration.durationMs);
     },
 
@@ -413,6 +410,7 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
       if (narration) emitNarrationEvent(narration);
 
       try {
+        await resolvePendingTransition();
         const center = await resolveCenter(selector);
         await moveCursorTo(center.x, center.y);
         const locator = page.locator(selector).first();
@@ -431,8 +429,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
       } catch (err) {
         throw actionError('hover', selector, err);
       }
-
-      await resolvePendingTransition();
       if (narration) await sleepRemainingNarration(narStartMs, narration.durationMs);
     },
 
@@ -442,6 +438,7 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
       const narStartMs = narration ? ctx.currentTimeMs() : 0;
       if (narration) emitNarrationEvent(narration);
 
+      await resolvePendingTransition();
       const startMs = ctx.currentTimeMs();
       try {
         await page.keyboard.press(key);
@@ -457,8 +454,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
       } catch (err) {
         throw actionError('press', key, err);
       }
-
-      await resolvePendingTransition();
       if (narration) await sleepRemainingNarration(narStartMs, narration.durationMs);
     },
 
