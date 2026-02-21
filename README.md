@@ -12,7 +12,6 @@ Screenwright analyzes your existing Playwright tests, generates a cinematic "dem
 
 https://github.com/user-attachments/assets/e925a4fb-ddc2-4740-9e30-23ad1768f29d
 
-
 ## Installation
 
 ### CLI
