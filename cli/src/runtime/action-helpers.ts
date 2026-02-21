@@ -199,7 +199,13 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
    */
   async function resolvePendingTransition(): Promise<void> {
     if (!pendingTransitionMarker || ctx.manifest.length === 0) return;
+    // Skip junk frames (bare page, loading spinners, etc.) that the capture
+    // loop recorded between the transition anchor and the settled page.
+    const junkFrames = ctx.manifest.length - pendingTransitionMarker.afterEntryIndex;
     pendingTransitionMarker.afterFile = await ctx.captureTransitionFrame();
+    if (junkFrames > 1) {
+      pendingTransitionMarker.consumedFrames = junkFrames;
+    }
     pendingTransitionMarker = null;
     ctx.transitionPending = false;
   }
