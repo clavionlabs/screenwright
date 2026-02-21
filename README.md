@@ -12,18 +12,6 @@ Screenwright analyzes your existing Playwright tests, generates a cinematic "dem
 
 https://github.com/user-attachments/assets/e925a4fb-ddc2-4740-9e30-23ad1768f29d
 
-## How It Works
-
-```
-Playwright test → Demo scenario → Record with pacing → Compose video
-                  (human data,     (Playwright +        (Remotion: transitions,
-                   narration cues)  video capture)       cursor + audio)
-```
-
-1. **Analyze** your Playwright test
-2. **Generate** a demo scenario with natural pacing, realistic data, and narration
-3. **Record** the scenario in Playwright with video capture
-4. **Compose** the final video with transitions, cursor overlay, and voiceover via Remotion
 
 ## Installation
 
