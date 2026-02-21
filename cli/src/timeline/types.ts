@@ -54,6 +54,7 @@ export interface SceneSlideConfig {
   textColor?: string;
   fontFamily?: string;
   titleFontSize?: number;
+  narrate?: string;
 }
 
 export interface SceneEvent {

@@ -292,10 +292,16 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
 
       if (slide) {
         const slideDurationMs = slide.duration ?? DEFAULT_SLIDE_DURATION_MS;
+        const narration = slide.narrate ? ctx.popNarration() : null;
+        if (narration) emitNarrationEvent(narration);
+        // If narration is longer than the slide, extend the slide to fit
+        const effectiveDurationMs = narration
+          ? Math.max(slideDurationMs, narration.durationMs)
+          : slideDurationMs;
         const manifestLenBefore = ctx.manifest.length;
         await injectSlideOverlay(page, title, description, slide, branding);
         ctx.ensureCaptureStarted();
-        await page.waitForTimeout(slideDurationMs);
+        await page.waitForTimeout(effectiveDurationMs);
 
         // Take an explicit screenshot of the slide for transition images.
         // This is deterministic — no dependency on capture loop timing.
@@ -504,7 +510,6 @@ export function createHelpers(page: Page, collector: TimelineCollector, ctx: Rec
     },
 
     async wait(ms) {
-      clearSlideState();
       ctx.ensureCaptureStarted();
       collector.emit({ type: 'wait', timestampMs: ctx.currentTimeMs(), durationMs: ms, reason: 'pacing' as const });
       await page.waitForTimeout(ms);

@@ -60,7 +60,9 @@ export async function extractNarrations(scenarioFn: ScenarioFn): Promise<string[
     press: async (_key, opts?) => { if (opts?.narration) narrations.push(opts.narration); },
     wait: async () => {},
     narrate: async (text) => { narrations.push(text); },
-    scene: async () => {},
+    scene: async (_title, descOrOpts?) => {
+      if (typeof descOrOpts === 'object' && descOrOpts?.slide?.narrate) narrations.push(descOrOpts.slide.narrate);
+    },
     transition: async () => {},
   };
   await scenarioFn(stub);
