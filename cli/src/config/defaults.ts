@@ -1,7 +1,7 @@
 import { DEFAULT_TTS_INSTRUCTIONS, type ScreenwrightConfig } from './config-schema.js';
 
 export const defaultConfig: ScreenwrightConfig = {
-  voice: 'en_US-amy-medium',
+  piperVoice: 'en_US-amy-medium',
   resolution: { width: 1280, height: 720 },
   outputDir: './output',
   locale: 'en-US',

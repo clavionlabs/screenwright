@@ -90,7 +90,7 @@ export const composeCommand = new Command('compose')
           spinner = ora(`Generating voiceover (${texts.length} segments via ${config.ttsProvider})`).start();
           try {
             const modelPath = config.ttsProvider === 'piper'
-              ? (await ensureDependencies(config.voice)).modelPath
+              ? (await ensureDependencies(config.piperVoice)).modelPath
               : undefined;
             pregenerated = await pregenerateNarrations(texts, {
               tempDir: tempNarrationDir,

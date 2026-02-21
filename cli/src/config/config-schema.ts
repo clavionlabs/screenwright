@@ -22,7 +22,7 @@ export const brandingSchema = z.object({
 export type BrandingConfig = z.infer<typeof brandingSchema>;
 
 export const configSchema = z.object({
-  voice: z.string().default('en_US-amy-medium'),
+  piperVoice: z.string().default('en_US-amy-medium'),
   resolution: z.object({
     width: z.number().int().positive(),
     height: z.number().int().positive(),

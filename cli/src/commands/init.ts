@@ -118,7 +118,7 @@ export async function installSkills(opts?: InstallSkillsOptions): Promise<void> 
 
 export const initCommand = new Command('init')
   .description('Bootstrap config and download voice model')
-  .option('--voice <model>', 'Voice model to use')
+  .option('--piper-voice <model>', 'Piper voice model to use')
   .option('--tts <provider>', 'TTS provider: piper or openai')
   .option('--openai-voice <voice>', 'OpenAI voice name')
   .option('--skip-voice-download', 'Skip downloading the voice model')
@@ -148,13 +148,13 @@ export const initCommand = new Command('init')
         default: 'piper',
       });
 
-      let voice = opts.voice;
+      let piperVoice = opts.piperVoice;
       let openaiVoice = opts.openaiVoice;
 
-      if (ttsProvider === 'piper' && !voice) {
-        voice = await input({
+      if (ttsProvider === 'piper' && !piperVoice) {
+        piperVoice = await input({
           message: 'Piper voice model',
-          default: defaultConfig.voice,
+          default: defaultConfig.piperVoice,
         });
       } else if (ttsProvider === 'openai' && !openaiVoice) {
         openaiVoice = await select({
@@ -166,7 +166,7 @@ export const initCommand = new Command('init')
 
       const config = {
         ...defaultConfig,
-        voice: voice ?? defaultConfig.voice,
+        piperVoice: piperVoice ?? defaultConfig.piperVoice,
         ttsProvider: ttsProvider as 'piper' | 'openai',
         openaiVoice: (openaiVoice ?? defaultConfig.openaiVoice) as typeof defaultConfig.openaiVoice,
       };
@@ -175,7 +175,7 @@ export const initCommand = new Command('init')
 
       // Update opts so downstream steps use the chosen values
       opts.tts = ttsProvider;
-      opts.voice = config.voice;
+      opts.piperVoice = config.piperVoice;
       opts.openaiVoice = config.openaiVoice;
     }
 
@@ -183,7 +183,7 @@ export const initCommand = new Command('init')
     if (!opts.skipVoiceDownload && opts.tts !== 'openai') {
       const spinner = ora('Downloading Piper TTS and voice model').start();
       try {
-        await ensureDependencies(opts.voice ?? defaultConfig.voice);
+        await ensureDependencies(opts.piperVoice ?? defaultConfig.piperVoice);
         spinner.succeed('Piper TTS and voice model ready');
       } catch (err: any) {
         spinner.warn('Could not download voice model');

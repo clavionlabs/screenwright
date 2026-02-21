@@ -70,13 +70,13 @@ npx screenwright preview ./demos/checkout-demo.ts
 Bootstrap config, set up TTS provider, and install coding assistant skills.
 
 ```bash
-npx screenwright init [--tts piper|openai] [--voice <model>] [--openai-voice <voice>] [--skip-voice-download] [--skip-skill-install]
+npx screenwright init [--tts piper|openai] [--piper-voice <model>] [--openai-voice <voice>] [--skip-voice-download] [--skip-skill-install]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--tts` | (interactive) | TTS provider: `openai` (recommended) or `piper` (local/free, lower quality) |
-| `--voice` | `en_US-amy-medium` | Piper TTS voice model |
+| `--piper-voice` | `en_US-amy-medium` | Piper TTS voice model |
 | `--openai-voice` | `nova` | OpenAI voice name |
 | `--skip-voice-download` | false | Skip downloading Piper voice model |
 | `--skip-skill-install` | false | Skip coding assistant skill installation |
@@ -228,9 +228,9 @@ Follow the suggestion to lower the frame rate to match your machine's capability
 const config = {
   // TTS
   ttsProvider: "openai",             // "openai" (recommended) or "piper" (local/free, lower quality)
-  voice: "en_US-amy-medium",         // Piper voice model
   openaiVoice: "nova",               // OpenAI voice (when ttsProvider is "openai")
-  openaiTtsInstructions: "...",       // Tone instructions for OpenAI TTS
+  piperVoice: "en_US-amy-medium",     // Piper voice model (when ttsProvider is "piper")
+  openaiTtsInstructions: "...",      // Tone instructions for OpenAI TTS
 
   // Video
   resolution: { width: 1280, height: 720 },

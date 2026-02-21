@@ -25,9 +25,9 @@ export const configCommand = new Command('config')
     });
 
     if (config.ttsProvider === 'piper') {
-      config.voice = await input({
+      config.piperVoice = await input({
         message: 'Piper voice model',
-        default: current.voice,
+        default: current.piperVoice,
       });
     } else {
       config.openaiVoice = await select({

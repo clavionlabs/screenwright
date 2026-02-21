@@ -1,7 +1,7 @@
 import type { ScreenwrightConfig } from 'screenwright';
 
 const config: ScreenwrightConfig = {
-  voice: 'en_US-amy-medium',
+  piperVoice: 'en_US-amy-medium',
   resolution: { width: 1280, height: 720 },
   outputDir: './output',
   locale: 'en-US',
