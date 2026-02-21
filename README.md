@@ -212,9 +212,13 @@ When `sw.transition()` is followed by an action, the transition animation plays 
 
 This means the action's visual feedback (typing, hover effects, page changes from a click) always plays out naturally in the recorded frames rather than being hidden by the transition.
 
-## Video Quality
+## Resolution
 
-Videos are rendered at **2x (Retina) resolution** — a 1280×720 config produces a crisp 2560×1440 output. Screenwright records at **30 fps** by default. During recording, each captured screenshot advances a virtual clock by exactly `1000/30` ms, making the frame manifest authoritative for video timing.
+Videos are rendered at **2x (Retina) resolution** — a 1280×720 config produces a crisp 2560×1440 output.
+
+## Frame rate
+
+Screenwright records at **30 fps** by default. During recording, each captured screenshot advances a virtual clock by exactly `1000/30` ms, making the frame manifest authoritative for video timing.
 
 ### Low-power machines
 
