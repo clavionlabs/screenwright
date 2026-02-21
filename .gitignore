@@ -11,3 +11,4 @@ dist/
 .screenwright/
 cli/src/version.ts
 cli/skill/
+*.narration-temp
