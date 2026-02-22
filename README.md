@@ -10,6 +10,8 @@ Screenwright analyzes your existing Playwright tests, generates a cinematic "dem
 
 ## Example
 
+Generated from [`cli/scripts/showcase-instaclaw/scenario.js`](cli/scripts/showcase-instaclaw/scenario.js):
+
 https://github.com/user-attachments/assets/e925a4fb-ddc2-4740-9e30-23ad1768f29d
 
 ## Installation
