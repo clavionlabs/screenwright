@@ -1,16 +1,16 @@
 {
-  "name": "screenwright",
-  "version": "0.3.0",
-  "description": "Turn Playwright E2E tests into polished product demo videos",
+  "name": "@clavionlabs/screenwright",
+  "version": "0.4.0",
+  "description": "Turn Playwright E2E tests into polished product demo videos (Clavion Labs fork)",
   "license": "MIT",
-  "author": "Guillaume Dupuy",
+  "author": "Clavion Labs",
   "repository": {
     "type": "git",
-    "url": "https://github.com/guidupuy/screenwright.git",
+    "url": "https://github.com/clavionlabs/screenwright.git",
     "directory": "cli"
   },
-  "homepage": "https://github.com/guidupuy/screenwright",
-  "bugs": "https://github.com/guidupuy/screenwright/issues",
+  "homepage": "https://github.com/clavionlabs/screenwright",
+  "bugs": "https://github.com/clavionlabs/screenwright/issues",
   "keywords": [
     "playwright",
     "video",
@@ -22,13 +22,13 @@
     "recording"
   ],
   "type": "module",
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "main": "./dist-clavion/src/index.js",
+  "types": "./dist-clavion/src/index.d.ts",
   "exports": {
-    ".": "./dist/src/index.js"
+    ".": "./dist-clavion/src/index.js"
   },
   "bin": {
-    "screenwright": "./dist/bin/screenwright.js"
+    "screenwright": "./dist-clavion/bin/screenwright.js"
   },
   "scripts": {
     "generate:version": "node scripts/sync-version.cjs",
@@ -39,10 +39,10 @@
     "test:watch": "vitest",
     "prelint": "pnpm run generate:version",
     "lint": "tsc --noEmit",
-    "postinstall": "node dist/src/scripts/postinstall.js || true",
+    "postinstall": "node dist-clavion/src/scripts/postinstall.js || true",
     "prepack": "mkdir -p skill && node scripts/patch-skill.cjs && cp ../LICENSE .",
     "postpack": "rm -rf skill LICENSE",
-    "showcase": "node dist/bin/screenwright.js compose scripts/showcase/scenario.js --no-voiceover --no-cursor --out output/animation-showcase.mp4"
+    "showcase": "node dist-clavion/bin/screenwright.js compose scripts/showcase/scenario.js --no-voiceover --no-cursor --out output/animation-showcase.mp4"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.2.0",
@@ -67,7 +67,7 @@
     "node": ">=20"
   },
   "files": [
-    "dist",
+    "dist-clavion",
     "assets",
     "skill",
     "LICENSE"

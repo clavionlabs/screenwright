@@ -1,0 +1,20 @@
+import { DEFAULT_TTS_INSTRUCTIONS } from './config-schema.js';
+export const defaultConfig = {
+    piperVoice: 'en_US-amy-medium',
+    resolution: { width: 1280, height: 720 },
+    outputDir: './output',
+    locale: 'en-US',
+    colorScheme: 'light',
+    timezoneId: 'America/New_York',
+    ttsProvider: 'piper',
+    openaiVoice: 'nova',
+    openaiTtsInstructions: DEFAULT_TTS_INSTRUCTIONS,
+};
+export function serializeConfig(config) {
+    return `import type { ScreenwrightConfig } from 'screenwright';
+
+const config: ScreenwrightConfig = ${JSON.stringify(config, null, 2)};
+
+export default config;
+`;
+}
