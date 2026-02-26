@@ -1,7 +1,7 @@
 const config = {
   // TTS — Pocket TTS (local, no API key needed)
   ttsProvider: "pocket",
-  pocketVoice: "marius",
+  pocketVoice: "alba",
 
   // TTS — Gemini Pro with Fenrir voice (fallback / comparison)
   // ttsProvider: "gemini",

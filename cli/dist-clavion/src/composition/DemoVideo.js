@@ -150,7 +150,8 @@ export const DemoVideo = ({ timeline, branding }) => {
     const clickEvents = remappedEvents.filter((e) => e.type === 'action' && e.action === 'click');
     const narrations = remappedEvents.filter((e) => e.type === 'narration');
     const rawCursorTargets = remappedEvents.filter((e) => e.type === 'cursor_target');
-    const slideScenes = remappedEvents.filter((e) => e.type === 'scene' && !!e.slide);
+    const allScenes = remappedEvents.filter((e) => e.type === 'scene');
+    const slideScenes = allScenes.filter((e) => !!e.slide);
 
     // Track current URL from navigate events for browser chrome
     const navigateEvents = remappedEvents.filter((e) => e.type === 'action' && e.action === 'navigate');
@@ -169,10 +170,12 @@ export const DemoVideo = ({ timeline, branding }) => {
     } catch { /* keep as-is */ }
 
     // Determine if we're in a slide scene (no browser chrome during slides)
+    // Use next scene event (not cursor target) as the slide boundary —
+    // a slide ends when any new scene starts, not when the mouse first moves.
     const duringSlide = slideScenes.some(s => {
         if (currentTimeMs < s.timestampMs) return false;
-        const nextCursor = rawCursorTargets.find(c => c.timestampMs > s.timestampMs);
-        return currentTimeMs < (nextCursor ? nextCursor.timestampMs : Infinity);
+        const nextScene = allScenes.find(sc => sc.timestampMs > s.timestampMs);
+        return currentTimeMs < (nextScene ? nextScene.timestampMs : Infinity);
     });
 
     const showChrome = !duringSlide && resolution.type !== 'transition';
