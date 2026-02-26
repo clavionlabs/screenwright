@@ -1,307 +1,191 @@
-# 🎬 Screenwright
+# Screenwright — Clavion Labs Fork
 
-[![npm version](https://img.shields.io/npm/v/screenwright)](https://www.npmjs.com/package/screenwright)
-[![CI](https://github.com/guidupuy/screenwright/actions/workflows/ci.yml/badge.svg)](https://github.com/guidupuy/screenwright/actions/workflows/ci.yml)
+[![Forked from](https://img.shields.io/badge/forked%20from-guidupuy%2Fscreenwright-blue)](https://github.com/guidupuy/screenwright)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Turn Playwright E2E tests into polished product demo videos.
+Turn Playwright E2E tests into polished product demo videos — with unified TTS audio, versioned output, and production-grade rendering fixes.
 
-Screenwright analyzes your existing Playwright tests, generates a cinematic "demo scenario" with human pacing and narration, records it with video capture, then composites cursor animation and voiceover into a final MP4.
+This is the [Clavion Labs](https://github.com/clavionlabs) fork of [screenwright](https://github.com/guidupuy/screenwright) v0.3.0, extended for the **CPPA** (Conscious Physicians Psychedelic Academy) product walkthrough video pipeline.
 
-## Example
+## What Changed from Upstream
 
-Generated from [`cli/scripts/showcase-instaclaw/scenario.js`](cli/scripts/showcase-instaclaw/scenario.js):
+### Unified TTS Audio Pipeline
+**Problem:** Upstream generates separate TTS audio for each narration segment (20+ API calls). Each call starts from a slightly different model state, causing audible pitch and tone inconsistency between segments.
 
-https://github.com/user-attachments/assets/e925a4fb-ddc2-4740-9e30-23ad1768f29d
+**Solution:** Single TTS call for the entire script. Segment texts are joined with `\n\n...\n\n` separators (which the voice model interprets as natural pauses), then `ffmpeg silencedetect` identifies pause boundaries to map timing back to individual segments.
 
-## Installation
+- `narration-preprocess.js` — Complete rewrite: `generateFullNarration()` replaces `pregenerateNarrations()`
+- `action-helpers.js` — First segment carries the audio file reference; subsequent segments get `null` (Remotion plays one continuous audio track)
 
-### CLI
+### Remotion Composition Fix (FPS + Chrome Frame)
+**Problem:** Remotion's webpack bundler silently fails to execute `calculateMetadata`, causing fps/width/height to revert to defaults (30fps, wrong dimensions). Videos play back too fast and lack the browser chrome frame.
+
+**Solution:** After `selectComposition()`, we override the composition object directly with values computed from the timeline metadata.
+
+- `render.js` — Adds `CHROME_HEIGHT = 72` to viewport height, sets `composition.fps` from timeline, uses `totalOutputFrames()` for duration, multi-threaded rendering (75% of CPU cores)
+
+### Versioned Output Directories
+**Problem:** Upstream writes to a temp directory that gets cleaned up. Audio files, frames, and renders are lost between runs.
+
+**Solution:** Every render creates a versioned directory: `output/<scenario>/v1/`, `v2/`, etc.
+
+```
+output/cppa-member-dashboard/
+  v1/
+    script.md          # Narration script with voice prompt + all segments
+    audio/             # narration-full.wav + narration-manifest.json
+    frames/            # Captured screenshots (with dedup)
+    render.mp4         # Final composed video
+  v2/
+    ...
+```
+
+- `compose.js` — Major rewrite with `nextVersionDir()`, `findPreviousAudioDir()`, `--reuse-audio` flag, script.md generation
+- `instrumented-page.js` — Accepts `opts.outputDir` to write frames into the version directory
+
+### Performance Optimizations
+- **Frame deduplication:** MD5 hash each screenshot, skip disk write if identical to previous frame (84% dedup rate achieved — 2111 of 2515 frames were static)
+- **DPR=1 capture:** Record at device pixel ratio 1 during Playwright capture; Remotion's `scale: 2` handles final upscaling to 2x resolution
+- **GPU rasterization:** `--enable-gpu-rasterization`, `--enable-zero-copy`, `--ignore-gpu-blocklist`
+- **JPEG quality 75:** Reduced from 90 for faster frame I/O (Remotion re-encodes to H.264 anyway)
+- **Pipelined writes:** Capture next frame while previous writes to disk
+
+### Pipeline Progress UI
+- `progress.js` — New file. Shows all pipeline steps upfront with pending markers (○)
+- TTY mode: ANSI cursor movement updates lines in-place with elapsed time
+- Non-TTY mode: Sequential line output fallback for piped/CI output
+
+### Gemini TTS Support
+- `gemini-engine.js` — Uses `gemini-2.5-pro-preview-tts` (Flash model has broken quota showing limit:0)
+- Configurable voice and instructions via `screenwright.config.js`
+
+## Repository Structure
+
+```
+screenwright-fork/
+  cli/
+    src/                   # Original TypeScript source (upstream, untouched)
+    dist-clavion/          # Our modified JS distribution
+      bin/screenwright.js   # CLI entry point
+      src/
+        commands/           # compose, progress (new), config, generate, init, preview, skill
+        composition/        # render (fixed), DemoVideo, BrowserChrome, CursorOverlay, NarrationTrack
+        runtime/            # narration-preprocess (rewritten), instrumented-page, action-helpers
+        voiceover/          # gemini-engine, openai-engine, piper-engine
+        config/             # config-schema, defaults, load-config
+        generator/          # prompts, scenario-generator
+        timeline/           # schema, types
+    package.json           # Points to dist-clavion/ (v0.4.0)
+  projects/
+    cppa/                  # CPPA product walkthrough project
+      screenwright.config.js
+      .env.example
+      demos/
+        cppa-member-dashboard.js
+      assets/
+        cppa-logo.webp
+      output/
+        cppa-member-dashboard/
+          v1/
+            script.md      # 20-segment narration script (ready for review)
+            audio/         # Generated audio goes here
+            frames/        # Captured frames go here
+  docs/                    # Upstream docs
+  skill/                   # Claude Code skill definition
+```
+
+### Why `dist-clavion/` Instead of Modifying `src/`?
+
+Our modifications are in compiled JavaScript (started as quick patches in `node_modules/`). The original TypeScript source remains in `cli/src/` as a reference. This separation means:
+
+- **No destructive changes** to upstream source
+- **`tsc` still works** on the original source → builds into `cli/dist/` for comparison
+- **Our JS is the runtime** — `package.json` points all entry points at `dist-clavion/`
+- **Future plan:** Port JS changes back to TypeScript source, then `dist-clavion/` becomes the build output
+
+### Files We Modified (7 of 35)
+
+| File | Change |
+|------|--------|
+| `composition/render.js` | Chrome frame fix, FPS override, multi-threaded render |
+| `runtime/instrumented-page.js` | DPR=1, GPU flags, frame dedup, outputDir support |
+| `runtime/narration-preprocess.js` | Complete rewrite — unified single-audio pipeline |
+| `runtime/action-helpers.js` | Null audioFile support for unified audio |
+| `commands/compose.js` | Versioned output, unified audio, script.md, --reuse-audio |
+| `commands/progress.js` | New file — pipeline progress UI |
+| `voiceover/gemini-engine.js` | Gemini Pro TTS model |
+
+### Files Without TypeScript Source (JS-only)
+
+These three files were created directly as JavaScript and have no corresponding `.ts` file in `cli/src/`:
+
+- `commands/progress.js` — Pipeline progress UI (new feature)
+- `composition/BrowserChrome.js` — Browser chrome overlay component
+- `voiceover/gemini-engine.js` — Gemini TTS engine
+
+## CPPA Project Setup
+
+### Prerequisites
+- Node.js >= 20
+- Playwright browsers: `npx playwright install chromium`
+- ffmpeg (for silence detection): `brew install ffmpeg`
+- Gemini API key with TTS access
+
+### Running
 
 ```bash
-npm install -D screenwright
-npx screenwright init
+cd projects/cppa
+
+# Set up environment
+cp .env.example .env
+# Edit .env with your GEMINI_API_KEY and CPPA test credentials
+
+# Export env vars (screenwright doesn't use dotenv)
+export GEMINI_API_KEY=your-key-here
+export CPPA_TEST_EMAIL=your-email
+export CPPA_TEST_PASSWORD=your-password
+
+# Run the compose pipeline
+npx screenwright compose demos/cppa-member-dashboard.js
+
+# Reuse audio from a previous version (saves TTS quota)
+npx screenwright compose demos/cppa-member-dashboard.js --reuse-audio
+
+# Skip voiceover entirely (for testing recording/rendering)
+npx screenwright compose demos/cppa-member-dashboard.js --no-voiceover
 ```
 
-`screenwright init` creates a config file, sets up your TTS provider (Piper for local/offline or OpenAI for cloud), and auto-installs the coding assistant skill for detected assistants (Claude Code, Codex).
+### TTS Configuration
 
-**Prerequisites:** Node.js >= 20, Playwright browsers (`npx playwright install chromium`)
+| Setting | Value |
+|---------|-------|
+| Provider | Gemini Pro (`gemini-2.5-pro-preview-tts`) |
+| Voice | Fenrir |
+| Quota | 50 calls/day (Pro tier) |
+| Voice prompt | Warm, clear, reassuring tone for older professional audience |
 
-### Claude Code Skill
+### Video Configuration
 
-`screenwright init` auto-detects Claude Code and offers to install the skill. You can also install it manually:
+| Setting | Value |
+|---------|-------|
+| FPS | 11 (matches M2 MacBook capture rate) |
+| Resolution | 1440x1080 (4:3) |
+| Remotion scale | 2x (final output: 2880x2160) |
+| Codec | H.264, CRF 18, yuv420p |
+| Branding | #1E3A5F blue, white text, Inter font |
 
-```bash
-mkdir -p ~/.claude/skills/screenwright
-npx screenwright skill > ~/.claude/skills/screenwright/SKILL.md
-```
+## Workflow
 
-The postinstall hook tries to keep the skill in sync on upgrade, but if lifecycle scripts are disabled (`--ignore-scripts`), re-run the command above after upgrading.
+1. **Edit the scenario** — `projects/cppa/demos/cppa-member-dashboard.js`
+2. **Review the script** — Run with `--no-voiceover` first to generate `script.md` without using TTS quota
+3. **Generate audio** — Run full pipeline (single TTS call generates unified audio)
+4. **Iterate** — Next run creates `v2/`, `v3/`, etc. Use `--reuse-audio` to reuse previous audio
 
-Then use `/screenwright` in Claude Code to get started.
+## Upstream
 
-## Quick Start
+This fork tracks [guidupuy/screenwright](https://github.com/guidupuy/screenwright). The upstream remote is configured as `upstream`.
 
-### With Claude Code (recommended)
-
-```
-/screenwright
-```
-
-The skill walks you through test selection, scenario generation, and video composition.
-
-### With the CLI
-
-```bash
-# 1. Generate a demo scenario from a Playwright test
-npx screenwright generate --test ./tests/checkout.spec.ts
-
-# 2. Review and edit the generated scenario at ./demos/checkout-demo.ts
-
-# 3. Compose the final video
-npx screenwright compose ./demos/checkout-demo.ts
-
-# 4. Or quickly preview without cursor/voiceover
-npx screenwright preview ./demos/checkout-demo.ts
-```
-
-## CLI Reference
-
-### `screenwright init`
-
-Bootstrap config, set up TTS provider, and install coding assistant skills.
-
-```bash
-npx screenwright init [--tts piper|openai] [--piper-voice <model>] [--openai-voice <voice>] [--skip-voice-download] [--skip-skill-install]
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--tts` | (interactive) | TTS provider: `openai` (recommended) or `piper` (local/free, lower quality) |
-| `--piper-voice` | `en_US-amy-medium` | Piper TTS voice model |
-| `--openai-voice` | `nova` | OpenAI voice name |
-| `--skip-voice-download` | false | Skip downloading Piper voice model |
-| `--skip-skill-install` | false | Skip coding assistant skill installation |
-
-### `screenwright generate`
-
-Prepare LLM prompts for demo scenario generation, or validate an existing scenario. With `--test`, reads your Playwright test and prints a system/user prompt pair — pipe them to any LLM, or use the `/screenwright` skill in Claude Code which handles this automatically. With `--validate`, checks that a scenario file uses the `sw.*` API correctly.
-
-```bash
-npx screenwright generate --test <path> [--out <path>] [--narration-style brief|detailed] [--app-description <desc>]
-npx screenwright generate --validate <path>
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--test` | (required) | Path to Playwright test file |
-| `--out` | `./demos/<name>-demo.ts` | Output path |
-| `--narration-style` | `detailed` | `brief` or `detailed` narration |
-| `--app-description` | - | Brief description of the app for context |
-| `--validate` | - | Validate an existing scenario file |
-
-### `screenwright compose`
-
-Record scenario and compose final MP4 with cursor overlay and voiceover.
-
-```bash
-npx screenwright compose <scenario> [--out <path>] [--resolution WxH]
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--out` | `./output/<name>.mp4` | Output path |
-| `--resolution` | `1280x720` | Video resolution |
-| `--no-voiceover` | false | Skip voiceover audio |
-| `--no-cursor` | false | Skip cursor overlay |
-| `--keep-temp` | false | Keep intermediate files |
-
-### `screenwright preview`
-
-Quick preview (WebM) without cursor overlay or voiceover.
-
-```bash
-npx screenwright preview <scenario> [--out <path>]
-```
-
-## Demo Scenario API
-
-Generated scenarios use the `sw` helper API:
-
-```typescript
-import type { ScreenwrightHelpers } from 'screenwright';
-
-export default async function scenario(sw: ScreenwrightHelpers) {
-  await sw.scene('Getting Started', { slide: {} });
-  await sw.navigate('http://localhost:3000', {
-    narration: "Let's open the app.",
-  });
-  await sw.click('[data-testid="login"]', {
-    narration: 'Click the login button.',
-  });
-  await sw.fill('[data-testid="email"]', 'sarah@example.com');
-  await sw.wait(2000);
-}
-```
-
-### Available Helpers
-
-| Method | Description |
-|--------|-------------|
-| `sw.scene(title)` | Mark a scene boundary (no slide) |
-| `sw.scene(title, { slide?: { duration?, brandColor?, textColor?, fontFamily?, titleFontSize?, narrate? } })` | Scene with optional transition slide. `narrate` adds voiceover to the slide (auto-extends duration to fit). Pass `{ slide: {} }` for defaults (2000ms duration / config branding) |
-| `sw.navigate(url, { narration? })` | Navigate to URL |
-| `sw.click(selector, { narration? })` | Click an element |
-| `sw.dblclick(selector, { narration? })` | Double-click an element |
-| `sw.fill(selector, value, { narration? })` | Type into an input (character by character) |
-| `sw.hover(selector, { narration? })` | Hover over an element |
-| `sw.press(key, { narration? })` | Press a keyboard key |
-| `sw.wait(ms)` | Pause for pacing |
-| `sw.narrate(text)` | Speak narration without an action |
-| `sw.transition({ type, duration })` | Visual transition between any two states (see Transitions below) |
-
-### Transitions
-
-Add visual transitions anywhere — between slides, after actions, or any time the screen changes:
-
-```typescript
-await sw.scene('First Scene', { slide: { duration: 1500 } });
-await sw.transition({ type: 'cube', duration: 800 });
-await sw.scene('Second Scene', { slide: { duration: 1500 } });
-```
-
-![Transitions showcase](docs/transitions-showcase.gif?v=2)
-
-| Transition | Description |
-|------------|-------------|
-| `fade` | Cross-dissolve between scenes |
-| `wipe` | Horizontal wipe reveal |
-| `slide-up` | Slide up with push effect |
-| `slide-left` | Slide left with push effect |
-| `zoom` | Zoom in/out with fade |
-| `doorway` | Two halves split apart revealing the next scene expanding from center |
-| `swap` | 3D horizontal swap with rotation |
-| `cube` | 3D cube rotation between faces |
-
-Transitions work between any two visual states — slides, frame-based captures, or a mix of both.
-
-### Transition Timing
-
-When `sw.transition()` is followed by an action, the transition animation plays first, then the action executes in full view. The "after" frame of the transition is chosen to show the page **before** the action's visible effect begins:
-
-| Next action after `sw.transition()` | Transition ends on | Then you see |
-|---|---|---|
-| `sw.click(sel)` | Page before cursor moves | Cursor moves to element, click fires |
-| `sw.dblclick(sel)` | Page before cursor moves | Cursor moves to element, double-click fires |
-| `sw.fill(sel, value)` | Page before cursor moves | Cursor moves to input, text is typed character by character |
-| `sw.hover(sel)` | Page before cursor moves | Cursor moves to element, hover triggers |
-| `sw.press(key)` | Page before keypress | Keypress fires |
-| `sw.navigate(url)` | Loaded new page | Page is already visible (navigation happened during transition) |
-| `sw.scene(_, { slide })` | Slide overlay | Slide is already visible |
-
-This means the action's visual feedback (typing, hover effects, page changes from a click) always plays out naturally in the recorded frames rather than being hidden by the transition.
-
-## Resolution
-
-Videos are rendered at **2x (Retina) resolution** — a 1280×720 config produces a crisp 2560×1440 output.
-
-## Frame rate
-
-Screenwright records at **30 fps** by default. During recording, each captured screenshot advances a virtual clock by exactly `1000/30` ms, making the frame manifest authoritative for video timing.
-
-### Low-power machines
-
-If your machine can't sustain 30 fps (i.e., each screenshot takes longer than ~33 ms), the virtual clock falls behind wall time. This can cause narration audio to overlap in the output because the virtual duration of each segment becomes shorter than the actual audio.
-
-Screenwright detects this automatically. If the actual capture rate drops below 85% of the target, you'll see a warning:
-
-```
-⚠ Capture loop averaged 18.2fps (target 30fps). Video timing may be inaccurate.
-  Consider setting fps: 18 in your screenwright config, or running on a faster machine.
-```
-
-Follow the suggestion to lower the frame rate to match your machine's capability. A lower frame rate with accurate timing produces better results than a higher frame rate with drift.
-
-## Configuration
-
-`screenwright.config.ts` (created by `screenwright init`):
-
-```typescript
-const config = {
-  // TTS
-  ttsProvider: "openai",             // "openai" (recommended) or "piper" (local/free, lower quality)
-  openaiVoice: "nova",               // OpenAI voice (when ttsProvider is "openai")
-  piperVoice: "en_US-amy-medium",     // Piper voice model (when ttsProvider is "piper")
-  openaiTtsInstructions: "...",      // Tone instructions for OpenAI TTS
-
-  // Video
-  resolution: { width: 1280, height: 720 },
-  outputDir: "./output",
-
-  // Browser
-  locale: "en-US",
-  colorScheme: "light",
-  timezoneId: "America/New_York",
-
-  // Default slide styling (used when sw.scene() is called with { slide: {} })
-  branding: {
-    brandColor: "#4F46E5",       // Default slide background color (hex)
-    textColor: "#FFFFFF",        // Default slide text color (hex)
-    fontFamily: "Inter",         // Default Google Fonts family (optional)
-  },
-};
-
-export default config;
-```
-
-When using OpenAI TTS, set the `OPENAI_API_KEY` environment variable.
-
-## Troubleshooting
-
-**"Playwright browsers not installed"**
-```bash
-npx playwright install chromium
-```
-
-**"Could not connect to the app"**
-Make sure your dev server is running before composing.
-
-**"Voiceover generation failed"**
-Re-run `npx screenwright init` to download the Piper TTS binary. Or use `--no-voiceover` to skip.
-
-**"Out of memory during rendering"**
-Try a lower resolution: `--resolution 1280x720`
-
-**"Timed out waiting for an element"**
-Check that selectors in the scenario match your app's current DOM. The error message includes the exact `sw.*` call and selector that failed.
-
-## Architecture
-
-```
-cli/
-  src/
-    commands/       # CLI commands (init, generate, compose, preview)
-    runtime/        # Playwright instrumentation (sw.* helpers, timeline collector)
-    composition/    # Remotion components (DemoVideo, CursorOverlay, NarrationTrack)
-    voiceover/      # Piper TTS engine, OpenAI TTS engine, narration timing
-    generator/      # LLM prompt templates for scenario generation
-    timeline/       # Timeline JSON types and Zod schema
-    config/         # Configuration schema and defaults
-skill/
-  SKILL.md          # Claude Code skill definition
-```
-
-## Releasing
-
-Bump the version in `cli/package.json`, commit, tag, and push:
-
-```bash
-# edit cli/package.json version
-git add cli/package.json && git commit -m "Release v0.X.Y"
-git tag v0.X.Y && git push origin main --tags
-```
-
-GitHub Actions publishes to npm via [trusted publishing](https://docs.npmjs.com/trusted-publishers) and creates a GitHub Release automatically.
+For the original README and documentation, see the [upstream repo](https://github.com/guidupuy/screenwright).
 
 ## License
 

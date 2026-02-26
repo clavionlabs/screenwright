@@ -23,7 +23,6 @@
   ],
   "type": "module",
   "main": "./dist-clavion/src/index.js",
-  "types": "./dist-clavion/src/index.d.ts",
   "exports": {
     ".": "./dist-clavion/src/index.js"
   },
