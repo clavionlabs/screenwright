@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { synthesize as piperSynthesize } from '../voiceover/piper-engine.js';
 import { synthesize as openaiSynthesize } from '../voiceover/openai-engine.js';
 import { synthesize as geminiSynthesize } from '../voiceover/gemini-engine.js';
+import { synthesize as pocketSynthesize } from '../voiceover/pocket-engine.js';
 const execFileAsync = promisify(execFile);
 
 /**
@@ -228,9 +229,26 @@ export async function generateFullNarration(texts, opts) {
         }
     }
 
-    // Generate the full audio via TTS
-    const result = await geminiSynthesize(fullScript, audioPath, opts.geminiVoice, opts.geminiTtsInstructions);
-    const totalDurationMs = result.durationMs;
+    // Generate the full audio via TTS (provider routing)
+    const provider = opts.ttsProvider ?? 'gemini';
+    let totalDurationMs;
+
+    if (provider === 'pocket') {
+        const result = await pocketSynthesize(fullScript, audioPath, {
+            voice: opts.pocketVoice ?? 'marius',
+            temp: opts.pocketTemp,
+            maxTokens: opts.pocketMaxTokens,
+        });
+        totalDurationMs = result.durationMs;
+    } else if (provider === 'gemini') {
+        const result = await geminiSynthesize(fullScript, audioPath, opts.geminiVoice, opts.geminiTtsInstructions);
+        totalDurationMs = result.durationMs;
+    } else if (provider === 'openai') {
+        const result = await openaiSynthesize(fullScript, audioPath, opts.openaiVoice, opts.openaiTtsInstructions);
+        totalDurationMs = result.durationMs;
+    } else {
+        throw new Error(`Unknown TTS provider: ${provider}`);
+    }
 
     // Detect silences to find segment boundaries
     const silences = await detectSilences(audioPath);
@@ -239,9 +257,12 @@ export async function generateFullNarration(texts, opts) {
     const segments = mapSilencesToSegments(texts, silences, totalDurationMs);
 
     // Save manifest for reuse
+    const voiceName = provider === 'pocket' ? (opts.pocketVoice ?? 'marius')
+        : provider === 'gemini' ? opts.geminiVoice
+        : opts.openaiVoice;
     const manifest = {
-        provider: 'gemini',
-        voice: opts.geminiVoice,
+        provider,
+        voice: voiceName,
         fullScript,
         totalDurationMs,
         silencesDetected: silences.length,

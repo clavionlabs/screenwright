@@ -176,12 +176,17 @@ export const composeCommand = new Command('compose')
             pipe.complete('extract', `${texts.length} segments`);
 
             if (texts.length > 0) {
-                // Validate API key (skip if reusing audio)
+                // Validate API key (skip if reusing audio or using local TTS)
                 if (!reuseAudioDir) {
                     if (config.ttsProvider === 'gemini' && !process.env.GEMINI_API_KEY) {
                         pipe.fail('tts', 'GEMINI_API_KEY required');
                         process.exit(1);
                     }
+                    if (config.ttsProvider === 'openai' && !process.env.OPENAI_API_KEY) {
+                        pipe.fail('tts', 'OPENAI_API_KEY required');
+                        process.exit(1);
+                    }
+                    // pocket provider needs no API key (local)
                 }
 
                 // 3. Generate single unified audio file
@@ -189,8 +194,17 @@ export const composeCommand = new Command('compose')
                 try {
                     narrationResult = await generateFullNarration(texts, {
                         audioDir,
+                        ttsProvider: config.ttsProvider,
+                        // Gemini options
                         geminiVoice: config.geminiVoice,
                         geminiTtsInstructions: config.geminiTtsInstructions,
+                        // OpenAI options
+                        openaiVoice: config.openaiVoice,
+                        openaiTtsInstructions: config.openaiTtsInstructions,
+                        // Pocket options
+                        pocketVoice: config.pocketVoice,
+                        pocketTemp: config.pocketTemp,
+                        pocketMaxTokens: config.pocketMaxTokens,
                         reuseAudioDir: reuseAudioDir ?? undefined,
                     });
 
