@@ -21,10 +21,11 @@ async function findPocketTtsSetup() {
         return process.env.POCKET_TTS_DIR;
     }
 
-    // Search common locations
+    // Search common locations — prefer the in-repo copy at tools/pocket-tts/
     const candidates = [
-        resolve(process.cwd(), '../../pocket-tts-setup'),           // from projects/cppa/
-        resolve(process.cwd(), '../pocket-tts-setup'),              // from screenwright-fork/
+        resolve(import.meta.dirname, '../../../../tools/pocket-tts'),  // cli/dist-clavion/src/voiceover/ → tools/pocket-tts/
+        resolve(process.cwd(), '../../tools/pocket-tts'),              // from projects/cppa/
+        resolve(process.cwd(), '../../pocket-tts-setup'),              // legacy: external pocket-tts-setup
         resolve(process.env.HOME, 'Documents/Business/Clavion Labs/pocket-tts-setup'),
     ];
 

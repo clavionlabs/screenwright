@@ -13,6 +13,7 @@ cli/src/version.ts
 cli/skill/
 *.narration-temp
 .env
+tools/pocket-tts/.venv/
 
 # Allow project output structure (script.md, .gitkeep) but not binary artifacts
 !projects/**/output/**/*.md

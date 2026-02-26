@@ -39,12 +39,15 @@ export async function synthesize(text, outputPath, voice = 'Kore', instructions)
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
 
-    // Only pass the actual text to speak — Gemini TTS will vocalize
-    // everything in the content, so instructions must stay out of it.
-    // Voice style is controlled purely by voice selection.
+    // Gemini TTS controls speech style via natural language prompts embedded
+    // in the content text. Prepend voice instructions so the model adopts the
+    // desired tone, pace, and style without vocalizing the instructions themselves.
+    const prompt = instructions
+        ? `${instructions}\n\n${text}`
+        : text;
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-pro-preview-tts',
-        contents: [{ parts: [{ text }] }],
+        contents: [{ parts: [{ text: prompt }] }],
         config: {
             responseModalities: ['AUDIO'],
             speechConfig: {

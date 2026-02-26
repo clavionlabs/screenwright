@@ -57,7 +57,15 @@ output/cppa-member-dashboard/
 
 ### Gemini TTS Support
 - `gemini-engine.js` — Uses `gemini-2.5-pro-preview-tts` (Flash model has broken quota showing limit:0)
+- Voice instructions prepended to content text (Gemini TTS controls speech style via natural language prompts in the content, not via `systemInstruction`)
 - Configurable voice and instructions via `screenwright.config.js`
+
+### Pocket TTS (Local Fallback)
+- `pocket-engine.js` — Node.js bridge to [pocket-tts-mlx](https://github.com/nicobailon/pocket-tts-mlx) (Apple Silicon, no API key)
+- Self-contained in `tools/pocket-tts/` with its own Python venv
+- 8 voices: alba, marius, javert, jean, fantine, cosette, eponine, azelma
+- Not natural enough for production — useful for testing the pipeline without burning API quota
+- **Important:** `pocketMaxTokens` must be 50 (default). Higher values cause garbled audio.
 
 ## Repository Structure
 
@@ -71,7 +79,7 @@ screenwright-fork/
         commands/           # compose, progress (new), config, generate, init, preview, skill
         composition/        # render (fixed), DemoVideo, BrowserChrome, CursorOverlay, NarrationTrack
         runtime/            # narration-preprocess (rewritten), instrumented-page, action-helpers
-        voiceover/          # gemini-engine, openai-engine, piper-engine
+        voiceover/          # gemini-engine, pocket-engine, openai-engine, piper-engine
         config/             # config-schema, defaults, load-config
         generator/          # prompts, scenario-generator
         timeline/           # schema, types
@@ -90,6 +98,11 @@ screenwright-fork/
             script.md      # 20-segment narration script (ready for review)
             audio/         # Generated audio goes here
             frames/        # Captured frames go here
+  tools/
+    pocket-tts/            # Local TTS fallback (Apple Silicon MLX)
+      main.py              # Single-text generation
+      generate_segments.py # Per-segment generation with silence gaps
+      pyproject.toml       # Python deps (pocket-tts-mlx)
   docs/                    # Upstream docs
   skill/                   # Claude Code skill definition
 ```
@@ -103,25 +116,29 @@ Our modifications are in compiled JavaScript (started as quick patches in `node_
 - **Our JS is the runtime** — `package.json` points all entry points at `dist-clavion/`
 - **Future plan:** Port JS changes back to TypeScript source, then `dist-clavion/` becomes the build output
 
-### Files We Modified (7 of 35)
+### Files We Modified (9 of 35)
 
 | File | Change |
 |------|--------|
 | `composition/render.js` | Chrome frame fix, FPS override, multi-threaded render |
+| `composition/DemoVideo.js` | Chrome frame uses scene boundaries instead of cursor targets |
 | `runtime/instrumented-page.js` | DPR=1, GPU flags, frame dedup, outputDir support |
 | `runtime/narration-preprocess.js` | Complete rewrite — unified single-audio pipeline |
 | `runtime/action-helpers.js` | Null audioFile support for unified audio |
 | `commands/compose.js` | Versioned output, unified audio, script.md, --reuse-audio |
 | `commands/progress.js` | New file — pipeline progress UI |
-| `voiceover/gemini-engine.js` | Gemini Pro TTS model |
+| `voiceover/gemini-engine.js` | Gemini Pro TTS, voice instructions prepended to content |
+| `voiceover/pocket-engine.js` | New — Node.js bridge to Pocket TTS Python process |
+| `config/config-schema.js` | Pocket provider config (voice, temp, maxTokens default 50) |
 
 ### Files Without TypeScript Source (JS-only)
 
-These three files were created directly as JavaScript and have no corresponding `.ts` file in `cli/src/`:
+These files were created directly as JavaScript and have no corresponding `.ts` file in `cli/src/`:
 
 - `commands/progress.js` — Pipeline progress UI (new feature)
 - `composition/BrowserChrome.js` — Browser chrome overlay component
 - `voiceover/gemini-engine.js` — Gemini TTS engine
+- `voiceover/pocket-engine.js` — Pocket TTS bridge
 
 ## CPPA Project Setup
 
@@ -157,12 +174,25 @@ npx screenwright compose demos/cppa-member-dashboard.js --no-voiceover
 
 ### TTS Configuration
 
+**Gemini (production)**
+
 | Setting | Value |
 |---------|-------|
 | Provider | Gemini Pro (`gemini-2.5-pro-preview-tts`) |
 | Voice | Fenrir |
 | Quota | 50 calls/day (Pro tier) |
 | Voice prompt | Warm, clear, reassuring tone for older professional audience |
+
+**Pocket TTS (local testing)**
+
+| Setting | Value |
+|---------|-------|
+| Provider | `pocket-tts-mlx` (Apple Silicon only) |
+| Voice | alba (8 available) |
+| Max tokens | 50 (do not increase — causes garbled audio) |
+| Setup | `cd tools/pocket-tts && uv sync` |
+
+Switch providers in `screenwright.config.js` by changing `ttsProvider` to `"pocket"` or `"gemini"`.
 
 ### Video Configuration
 

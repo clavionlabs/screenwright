@@ -58,11 +58,14 @@ export async function extractNarrations(scenarioFn) {
 }
 
 // ── Segment separator for combining texts into one script ──
+// Ellipses create longer pauses between segments in Gemini/OpenAI TTS,
+// which helps silence detection identify segment boundaries.
+// NOTE: Pocket TTS cannot handle "..." — use ". " if switching to pocket.
 const SEGMENT_SEPARATOR = '\n\n...\n\n';
 
 /**
  * Combine all narration texts into a single script for unified TTS generation.
- * Uses "..." as a natural pause marker between segments.
+ * Uses ellipses as pause markers between segments for natural pacing.
  */
 export function buildFullScript(texts) {
     return texts.join(SEGMENT_SEPARATOR);

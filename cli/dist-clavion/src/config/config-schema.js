@@ -36,6 +36,6 @@ export const configSchema = z.object({
     geminiTtsInstructions: z.string().default(DEFAULT_TTS_INSTRUCTIONS),
     pocketVoice: z.string().default('marius'),
     pocketTemp: z.number().min(0).max(2).default(0.7),
-    pocketMaxTokens: z.number().int().min(1).max(2000).default(500),
+    pocketMaxTokens: z.number().int().min(1).max(2000).default(50),
     branding: brandingSchema.optional(),
 });

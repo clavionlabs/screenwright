@@ -1,10 +1,10 @@
 const config = {
-  // TTS — Pocket TTS (local, no API key needed)
-  ttsProvider: "pocket",
-  pocketVoice: "alba",
+  // TTS — Gemini Pro with Fenrir voice
+  ttsProvider: "gemini",
 
-  // TTS — Gemini Pro with Fenrir voice (fallback / comparison)
-  // ttsProvider: "gemini",
+  // TTS — Pocket TTS (local, no API key needed)
+  // ttsProvider: "pocket",
+  pocketVoice: "alba",
   geminiVoice: "Fenrir",
   geminiTtsInstructions: "Speak in a warm, clear, and reassuring tone. Pace yourself slowly and deliberately — your audience is older professionals who appreciate clarity over speed. Pause naturally between sentences. Think of a patient, friendly colleague walking someone through something on their computer for the first time. Never rush.",
 
