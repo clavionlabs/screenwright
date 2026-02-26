@@ -127,7 +127,9 @@ export async function runScenario(scenario, opts) {
     }
     function popNarration() {
         if (narrationQueue.length === 0) {
-            throw new Error('No pre-generated narrations remaining in queue');
+            // No pregenerated narrations — return a silent stub.
+            // This happens with --no-voiceover on a narrated scenario.
+            return { text: '', durationMs: 500, audioFile: null };
         }
         narrationConsumed++;
         return narrationQueue.shift();
